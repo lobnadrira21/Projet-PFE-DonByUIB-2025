@@ -1,0 +1,30 @@
+# Python
+venv/
+.env/
+__pycache__/
+*.pyc
+
+# Node / Angular
+node_modules/
+dist/
+build/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+
+# Big binaries you don't want in history
+*.dll
+*.lib
+*.pdb
+*.exe
+*.so
+*.dylib
+
+# Other
+*.zip
+*.mp4
+*.pdf
+*.tar
+*.whl
