@@ -1,0 +1,14 @@
+<app-header-front></app-header-front>
+<div class="error-container">
+  <div class="error-text">
+    <h1 class="title">Erreur de paiement</h1>
+    <p class="message">Le paiement a échoué. Veuillez réessayer ou contacter le support.</p>
+    <div class="actions">
+      <button class="btn retry" >Réessayer</button>
+      <button class="btn home" [routerLink]="'/client'" >Retour à l'accueil</button>
+    </div>
+  </div>
+  <div class="error-image">
+    <img src="assets/img/error-payment.png" alt="Erreur de paiement" />
+  </div>
+</div>

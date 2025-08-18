@@ -1,0 +1,260 @@
+<div class="auth-wrapper">
+  <!-- ✅ Background with bubbles and transparent logo -->
+  <div class="auth-bg">
+    <img src="assets/img/uibreallogo.png" class="bg-logo" alt="Logo UIB" />
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <div class="auth-content">
+    <div class="card">
+      <div class="card-body text-center">
+        <div class="logo-container">
+          <img
+            src="assets/img/uiblogo.png"
+            alt="UIB Logo"
+            class="uib-logo"
+            (click)="goToHome()"
+            style="cursor: pointer;"
+          />
+        </div>
+
+        <h3 class="mb-4">Inscription</h3>
+
+        <!-- Full Name -->
+        <mat-form-field appearance="outline">
+          <mat-label>Nom complet *</mat-label>
+          <mat-icon matPrefix>person</mat-icon>
+          <input matInput [(ngModel)]="nom_complet" required />
+        </mat-form-field>
+        <div
+          *ngIf="!isValidNomComplet() && nom_complet.length > 0"
+          class="alert alert-danger alert-dismissible fade show mt-2"
+          role="alert"
+        >
+          <strong>Erreur :</strong> Le nom complet ne doit contenir que des
+          lettres (pas de chiffres ni de caractères spéciaux).
+          <button type="button" class="close" aria-label="Close" (click)="nom_complet = ''">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <!-- Email -->
+        <mat-form-field appearance="outline">
+          <mat-label>Email *</mat-label>
+          <mat-icon matPrefix>email</mat-icon>
+          <input matInput type="email" [(ngModel)]="email" required />
+        </mat-form-field>
+        <div
+          *ngIf="!isValidEmail() && email.length > 0"
+          class="alert alert-danger alert-dismissible fade show mt-2"
+          role="alert"
+        >
+          <strong>Erreur :</strong> Format d'adresse email invalide.
+          <button type="button" class="close" aria-label="Close" (click)="email = ''">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <!-- Téléphone -->
+        <mat-form-field appearance="outline">
+          <mat-label>Téléphone *</mat-label>
+          <mat-icon matPrefix>phone</mat-icon>
+          <input
+            matInput
+            type="text"
+            [(ngModel)]="telephone"
+            required
+            (input)="hideTelError = false"
+          />
+        </mat-form-field>
+        <div
+          *ngIf="!isValidTelephone() && telephone.length > 0"
+          class="alert alert-danger alert-dismissible fade show mt-2"
+          role="alert"
+        >
+          <strong>Erreur :</strong> Le numéro doit comporter exactement 8 chiffres.
+          <button type="button" class="close" aria-label="Close" (click)="hideTelError = true">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <!-- Password -->
+        <mat-form-field appearance="outline">
+          <mat-label>Mot de passe *</mat-label>
+          <mat-icon matPrefix>lock</mat-icon>
+          <input
+            matInput
+            type="password"
+            [(ngModel)]="password"
+            required
+            (input)="hidePwdError = false"
+          />
+        </mat-form-field>
+        <div
+          *ngIf="!isStrongPassword() && password.length > 0 && !hidePwdError"
+          class="alert alert-danger alert-dismissible fade show mt-2"
+          role="alert"
+        >
+          <strong>Erreur :</strong> Le mot de passe doit contenir au moins :
+          une lettre majuscule, un chiffre et un caractère spécial.
+          <button type="button" class="close" aria-label="Close" (click)="hidePwdError = true">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <!-- Confirm Password -->
+        <mat-form-field appearance="outline">
+          <mat-label>Confirmer mot de passe *</mat-label>
+          <mat-icon matPrefix>lock</mat-icon>
+          <input matInput type="password" [(ngModel)]="confirmPassword" required />
+        </mat-form-field>
+
+        <!-- CAPTCHA -->
+        <div class="captcha-section mb-3 text-center">
+          <img
+            [src]="captchaImage"
+            alt="CAPTCHA"
+            style="max-width: 100%; height: auto; margin-bottom: 10px;"
+          />
+          <input
+            matInput
+            type="text"
+            [(ngModel)]="userCaptchaInput"
+            placeholder="Recopiez le texte ci-dessus"
+            class="form-control"
+          />
+        </div>
+        <button mat-stroked-button color="primary" (click)="refreshCaptcha()">
+          Changer l’image
+        </button>
+
+        <!-- Donator checkbox -->
+        <mat-checkbox [(ngModel)]="role" [value]="'donator'">
+          Tu es un donateur
+        </mat-checkbox>
+
+        <p *ngIf="errorMessage" class="text-danger">{{ errorMessage }}</p>
+
+        <!-- Register Button opens the CIN modal -->
+        <button mat-raised-button color="primary" (click)="openCinModal()">
+          Enregistrer
+        </button>
+
+        <p class="text-muted">
+          Déjà inscrit ? <a [routerLink]="'/login'">Se connecter</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CIN Verification Modal -->
+<ng-container *ngIf="showCinModal">
+  <div class="modal-backdrop fade show"></div>
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Vérification de la CIN</h5>
+          <button type="button" class="close" aria-label="Close" (click)="cancelCinModal()">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <p>Veuillez téléverser une photo claire de votre CIN :</p>
+          <input type="file" accept="image/*" (change)="onCinFileChange($event)" />
+          <div *ngIf="cinFile"><p>Fichier sélectionné : {{ cinFile.name }}</p></div>
+
+          <div *ngIf="cinMessage" class="alert" [ngClass]="{'alert-success': cinOk, 'alert-danger': !cinOk}">
+            {{ cinMessage }}
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button mat-button (click)="cancelCinModal()">Annuler</button>
+          <button
+            mat-raised-button
+            color="primary"
+            [disabled]="!cinFile || isCinVerifying"
+            (click)="verifyCin()"
+          >
+            {{ isCinVerifying ? 'Vérification…' : 'Vérifier' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-container>
+
+<!-- Selfie Verification Modal (caméra web) -->
+<ng-container *ngIf="showSelfieModal">
+  <div class="modal-backdrop fade show"></div>
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Vérification du selfie</h5>
+          <button type="button" class="close" aria-label="Close" (click)="cancelSelfieModal()">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Live camera preview -->
+          <div *ngIf="!capturedDataUrl; else previewBlock">
+            <div class="camera-wrapper" style="position:relative; max-width: 420px; margin: 0 auto;">
+              <video #videoEl
+                     autoplay
+                     muted
+                     playsinline
+                     style="width:100%; border-radius: 8px; background:#000">
+              </video>
+              <div class="hint" style="position:absolute; bottom:8px; left:0; right:0; text-align:center; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);">
+                Cadrez votre visage et assurez-vous d’un bon éclairage.
+              </div>
+            </div>
+            <div class="text-center mt-3">
+              <button mat-raised-button color="primary" [disabled]="isSelfieVerifying || !cameraReady" (click)="captureSelfie()">
+                Prendre la photo
+              </button>
+              <div *ngIf="!cameraReady && !cameraError" class="text-muted mt-2">Initialisation de la caméra…</div>
+              <div *ngIf="cameraError" class="alert alert-danger mt-2">{{ cameraError }}</div>
+            </div>
+          </div>
+
+          <!-- Captured preview -->
+          <ng-template #previewBlock>
+            <div class="text-center">
+              <img [src]="capturedDataUrl" alt="aperçu selfie" style="max-width: 420px; width: 100%; border-radius: 8px;" />
+              <div class="mt-3">
+                <button mat-stroked-button color="primary" (click)="retakeSelfie()" [disabled]="isSelfieVerifying">Reprendre</button>
+                <button mat-raised-button color="primary" class="ml-2"
+                        (click)="verifySelfie()"
+                        [disabled]="isSelfieVerifying">
+                  {{ isSelfieVerifying ? 'Vérification…' : 'Vérifier' }}
+                </button>
+              </div>
+            </div>
+          </ng-template>
+
+          <!-- Result message -->
+          <div *ngIf="selfieMessage" class="alert mt-3"
+               [ngClass]="{'alert-success': selfieOk, 'alert-danger': !selfieOk}">
+            {{ selfieMessage }}
+            <div *ngIf="selfieScore !== null">
+              Score: {{ selfieScore | number:'1.2-3' }} / seuil: {{ selfieThreshold | number:'1.2-3' }}
+            </div>
+          </div>
+
+          <!-- Hidden canvas for capture -->
+          <canvas #canvasEl style="display:none;"></canvas>
+        </div>
+
+        <div class="modal-footer">
+          <button mat-button (click)="cancelSelfieModal()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-container>

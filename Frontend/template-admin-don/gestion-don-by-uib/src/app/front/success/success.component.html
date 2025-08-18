@@ -1,0 +1,39 @@
+<app-header-front></app-header-front>
+<div *ngIf="loading" class="text-center mt-5">
+    <div class="spinner-border text-success" role="status"></div>
+    <p>Vérification du paiement en cours...</p>
+  </div>
+  
+  <div *ngIf="!loading && paymentStatus === 'Paiement confirmé ! Merci pour votre don.'" class="container-fluid" style="margin-top: 20px;">
+    <div class="row justify-content-center">
+      <div class="col-md-10">
+        <div class="reussite-container">
+  <div class="reussite-text">
+    <h1 class="title">Paiement réussi</h1>
+    <p class="message">Votre paiement a été effectué avec succès. Merci pour votre aide et votre générosité.</p>
+    <div class="actions">
+      
+      <button class="btn home" [routerLink]="'/client'" >Retour à l'accueil</button>
+    </div>
+  </div>
+  <div class="reussite-image">
+    <img src="assets/img/reussite-payment.png" alt="reussite de paiement" />
+    <h5 class="text-success">{{ paymentStatus }}</h5>
+  </div>
+</div>
+      </div>
+    </div>
+  </div>
+  
+  <div *ngIf="!loading && paymentStatus !== 'Paiement confirmé ! Merci pour votre don.'" class="container-fluid mt-5">
+    <div class="row justify-content-center">
+      <div class="col-md-8">
+        <div class="alert alert-danger text-center" role="alert">
+          {{ paymentStatus }}
+        </div>
+      </div>
+    </div>
+  
+  </div>
+
+  

@@ -1,0 +1,114 @@
+<div class="main-content">
+   <div class="container-fluid">
+    <div class="row">
+      <!-- Associations Total -->
+      <div class="col-lg-3 col-md-6 col-sm-6" *ngIf="stats">
+        <div class="card card-stats">
+          <div class="card-header card-header-primary card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">groups</i>
+            </div>
+            <p class="card-category">Associations</p>
+            <h3 class="card-title">{{ stats.nb_associations }}</h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dons Total -->
+      <div class="col-lg-3 col-md-6 col-sm-6" *ngIf="stats">
+        <div class="card card-stats">
+          <div class="card-header card-header-success card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">volunteer_activism</i>
+            </div>
+            <p class="card-category">Dons</p>
+            <h3 class="card-title">{{ stats.nb_dons }}</h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- Montant Collecté -->
+      <div class="col-lg-3 col-md-6 col-sm-6" *ngIf="stats">
+        <div class="card card-stats">
+          <div class="card-header card-header-info card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">payments</i>
+            </div>
+            <p class="card-category">Montant Collecté</p>
+            <h3 class="card-title">{{ stats.total_montant | number:'1.0-3' }} TND</h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- Donateurs Actifs -->
+      <div class="col-lg-3 col-md-6 col-sm-6" *ngIf="stats">
+        <div class="card card-stats">
+          <div class="card-header card-header-warning card-header-icon">
+            <div class="card-icon">
+              <i class="material-icons">people</i>
+            </div>
+            <p class="card-category">Donateurs Actifs</p>
+            <h3 class="card-title">{{ stats.nb_donateurs_actifs }}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Montant par Mois & Répartition par Type -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card card-chart">
+          <div class="card-header card-header-success">
+            <div class="ct-chart" id="montantParMoisChart"></div>
+          </div>
+          <div class="card-body">
+            <h4 class="card-title">Montant Collecté par Mois</h4>
+          </div>
+        </div>
+      </div>
+
+    <div class="col-md-6">
+<div class="card card-chart">
+  <div class="card-header card-header-info">
+    <canvas id="assocTypeChart"></canvas>
+  </div>
+  <div class="card-body">
+    <h4 class="card-title">Associations par Type</h4>
+  </div>
+</div>
+
+
+
+</div>
+
+
+
+    <!-- Top Dons -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header card-header-warning">
+            <h4 class="card-title">Top 5 Dons</h4>
+          </div>
+          <div class="card-body table-responsive">
+            <table class="table table-hover">
+              <thead class="text-warning">
+                <th>Titre</th>
+                <th>Montant Collecté</th>
+                <th>Objectif</th>
+              </thead>
+              <tbody>
+                <tr *ngFor="let don of stats?.top_dons">
+                  <td>{{ don.titre }}</td>
+                  <td>{{ don.montant_collecte }}</td>
+                  <td>{{ don.objectif }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

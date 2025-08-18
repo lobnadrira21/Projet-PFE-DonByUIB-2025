@@ -1,0 +1,61 @@
+<div class="main-content">
+  <div class="container-fluid">
+    <div class="row justify-content-center">
+      <div class="col-md-8 user-profile-container">
+        <div class="card">
+          <div class="card-header card-header-danger">
+            <h4 class="card-title">Modifier Profil Donateur</h4>
+          </div>
+          <div class="card-body">
+            <form [formGroup]="profileForm" (ngSubmit)="updateProfileDonator()">
+              <div class="row">
+                <div class="col-md-6">
+                  <mat-form-field class="example-full-width">
+                    <input matInput placeholder="Nom complet" formControlName="nom_complet">
+                  </mat-form-field>
+                </div>
+                <div class="col-md-6">
+                  <mat-form-field class="example-full-width">
+                    <input matInput placeholder="Email" formControlName="email">
+                  </mat-form-field>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-6">
+                  <mat-form-field class="example-full-width">
+                    <input matInput placeholder="Téléphone" formControlName="telephone">
+                  </mat-form-field>
+                </div>
+              </div>
+
+             
+
+              <div class="row mt-3">
+                <div class="col-md-6">
+                  <mat-form-field class="example-full-width">
+                    <input matInput placeholder="Ancien mot de passe" formControlName="old_password" type="password">
+                  </mat-form-field>
+                </div>
+                <div class="col-md-6">
+                  <mat-form-field class="example-full-width">
+                    <input matInput placeholder="Nouveau mot de passe" formControlName="new_password" type="password">
+                  </mat-form-field>
+                </div>
+              </div>
+
+              <button mat-raised-button type="submit" class="btn btn-danger pull-right" [disabled]="profileForm.invalid">
+                Mettre à jour le profil
+              </button>
+              <div class="clearfix"></div>
+            </form>
+
+            <p *ngIf="message" class="alert alert-info mt-3">{{ message }}</p>
+
+           
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

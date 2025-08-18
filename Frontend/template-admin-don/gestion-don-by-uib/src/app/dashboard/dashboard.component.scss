@@ -1,0 +1,9 @@
+/* ✅ Contrôle la taille du canvas Pie Chart */
+#assocTypeChart {
+  width: 300px !important;  /* ajuste à ta taille souhaitée */
+  height: 300px !important;
+  max-width: 100%;
+  margin: 0 auto;  /* centre */
+  background: #f0f0f0; /* fond gris si tu veux */
+  border-radius: 50%;
+}

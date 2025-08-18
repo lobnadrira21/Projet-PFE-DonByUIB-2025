@@ -1,0 +1,64 @@
+.error-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 40px;
+  flex-wrap: wrap;
+
+  .error-text {
+    flex: 1;
+    max-width: 500px;
+
+    .title {
+      font-size: 2.5rem;
+      color: #eb1c34;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+
+    .message {
+      font-size: 1.2rem;
+      color: #333;
+      margin-bottom: 30px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 15px;
+
+      .btn {
+        padding: 12px 24px;
+        font-size: 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        border: none;
+        text-decoration: none;
+
+        &.retry {
+          background-color: #eb1c34;
+          color: white;
+        }
+
+        &.home {
+          background-color: #c7c9bb;
+          color: #000;
+        }
+
+        &:hover {
+          opacity: 0.9;
+        }
+      }
+    }
+  }
+
+  .error-image {
+    flex: 1;
+    max-width: 500px;
+    img {
+      width: 100%;
+      height: auto;
+    }
+  }
+}
