@@ -1,12 +1,13 @@
+
+import os
+os.environ["UNIT_TEST"] = "1"   # must be before importing app
+
 import pytest
-from app import app as flask_app  # adapte si tu utilises une factory "create_app()"
+from app import app as flask_app
 
 @pytest.fixture()
 def app():
-    # Si tu as create_app(), fais: app = create_app(testing=True)
-    flask_app.config.update({
-        "TESTING": True,
-    })
+    flask_app.config.update({"TESTING": True})
     yield flask_app
 
 @pytest.fixture()

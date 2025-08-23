@@ -17,9 +17,17 @@ from datetime import datetime
 from datetime import date
 from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
-
+import os
+IS_UNIT = os.getenv("UNIT_TEST") == "1"
 app = Flask(__name__)
-
+if not IS_UNIT:
+    from transformers import CLIPProcessor, CLIPModel
+    try:
+        from facenet_pytorch import MTCNN, InceptionResnetV1
+    except Exception:
+        MTCNN = InceptionResnetV1 = None
+else:
+    CLIPProcessor = CLIPModel = MTCNN = InceptionResnetV1 = None
 CORS(app, resources={r"/*": {
     "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
     "allow_headers": ["Content-Type", "Authorization"],
