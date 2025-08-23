@@ -1,33 +1,37 @@
-from flask import Flask, jsonify, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from flask_jwt_extended import JWTManager, create_access_token, get_jwt, jwt_required, get_jwt_identity
-import requests
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import timedelta
-from flask_cors import CORS
-import ast
-from flask_cors import CORS
-import os
-from werkzeug.utils import secure_filename
-from flask_mail import Mail, Message
-from flask import url_for
-from flask import send_from_directory
-from datetime import datetime
-from datetime import date
-from sqlalchemy.orm import relationship
-from sqlalchemy import ForeignKey
 import os
 IS_UNIT = os.getenv("UNIT_TEST") == "1"
-app = Flask(__name__)
-if not IS_UNIT:
-    from transformers import CLIPProcessor, CLIPModel
+
+from flask import Flask, jsonify, request, url_for, send_from_directory
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_jwt_extended import (
+    JWTManager, create_access_token, get_jwt, jwt_required, get_jwt_identity
+)
+from flask_cors import CORS
+from flask_mail import Mail, Message
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from datetime import timedelta, datetime, date
+from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey
+import requests
+import ast
+
+# Import heavy ML libs ONLY when not running unit tests
+def _try_import_ml():
+    if IS_UNIT:
+        return None, None, None, None
     try:
+        from transformers import CLIPProcessor, CLIPModel
         from facenet_pytorch import MTCNN, InceptionResnetV1
+        return CLIPProcessor, CLIPModel, MTCNN, InceptionResnetV1
     except Exception:
-        MTCNN = InceptionResnetV1 = None
-else:
-    CLIPProcessor = CLIPModel = MTCNN = InceptionResnetV1 = None
+        # Don't crash tests if ML deps are missing
+        return None, None, None, None
+
+CLIPProcessor, CLIPModel, MTCNN, InceptionResnetV1 = _try_import_ml()
+
+app = Flask(__name__)
 CORS(app, resources={r"/*": {
     "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
     "allow_headers": ["Content-Type", "Authorization"],
