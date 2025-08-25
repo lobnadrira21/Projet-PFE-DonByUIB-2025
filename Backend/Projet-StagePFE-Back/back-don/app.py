@@ -27,13 +27,10 @@ CORS(app, resources={r"/*": {
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 }})
 # DB config (choose one of the two blocks)
-if IS_UNIT or os.getenv("USE_SQLITE") == "1":
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///dev.db"
-else:
-    
-    app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:postgres123@localhost:5432/gestiondonsdb?client_encoding=utf8"
-
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    "postgresql+psycopg2://postgres:postgres123@localhost:5432/gestiondonsdb?client_encoding=utf8"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["JWT_SECRET_KEY"] = '473f7e8c82ad4f2aae3704006097205f'
 
 # Files & mail (don’t commit real secrets)
@@ -2502,9 +2499,35 @@ def verify_face():
         "session_id": session_id
     }), 200
 
+# ------------------- ADD ADMIN -------------------
+@app.route("/add-admin", methods=["POST"])
+def add_admin():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    # check if email already exists
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already in use"}), 409
+
+    # create admin
+    admin = User(email=email, role="admin")
+    admin.set_password(password)
+
+    db.session.add(admin)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Admin created successfully",
+        "id": admin.id,
+        "email": admin.email
+    }), 201
+
+
 # ------------------- DATABASE MIGRATION -------------------
-with app.app_context():
-    db.create_all()
 
 if __name__ == "__main__":
     app.run(debug=True)
