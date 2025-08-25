@@ -17,8 +17,44 @@ from sqlalchemy import ForeignKey
 import requests
 import ast
 
-# Import heavy ML libs ONLY when not running unit tests
-def _try_import_ml():
+app = Flask(__name__)
+
+
+
+CORS(app, resources={r"/*": {
+    "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
+    "allow_headers": ["Content-Type", "Authorization"],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}})
+# DB config (choose one of the two blocks)
+if IS_UNIT or os.getenv("USE_SQLITE") == "1":
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///dev.db"
+else:
+    
+    app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql+psycopg2://postgres:postgres123@localhost:5432/gestiondonsdb?client_encoding=utf8"
+
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["JWT_SECRET_KEY"] = '473f7e8c82ad4f2aae3704006097205f'
+
+# Files & mail (don’t commit real secrets)
+UPLOAD_FOLDER = os.path.join(os.getcwd(), 'static', 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'lobnadrira21@gmail.com'
+app.config['MAIL_PASSWORD'] = 'afyw aypt zoqx mrvj'   
+app.config['MAIL_DEFAULT_SENDER'] = 'DonByUIB <admin@donbyuib.tn>'
+
+mail = Mail(app)
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+jwt = JWTManager(app)
+revoked_tokens = set()
+
+# Truly lazy ML import
+def get_ml():
     if IS_UNIT:
         return None, None, None, None
     try:
@@ -26,45 +62,7 @@ def _try_import_ml():
         from facenet_pytorch import MTCNN, InceptionResnetV1
         return CLIPProcessor, CLIPModel, MTCNN, InceptionResnetV1
     except Exception:
-        # Don't crash tests if ML deps are missing
         return None, None, None, None
-
-CLIPProcessor, CLIPModel, MTCNN, InceptionResnetV1 = _try_import_ml()
-
-app = Flask(__name__)
-CORS(app, resources={r"/*": {
-    "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
-    "allow_headers": ["Content-Type", "Authorization"],
-    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-}})
-
-
-
-# Database Configuration and token
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:postgres123@localhost:5432/gestiondonsdb?client_encoding=utf8'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config["JWT_SECRET_KEY"] = '473f7e8c82ad4f2aae3704006097205f'
-# for  images 
-UPLOAD_FOLDER = os.path.join(os.getcwd(), 'static', 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-# for email
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'lobnadrira21@gmail.com'
-app.config['MAIL_PASSWORD'] = 'afyw aypt zoqx mrvj'
-app.config['MAIL_DEFAULT_SENDER'] = 'DonByUIB <admin@donbyuib.tn>'
-
-mail = Mail(app)  
-
-# Initialize Database
-db = SQLAlchemy(app)
-migrate = Migrate(app, db) 
-jwt = JWTManager(app)
-
-revoked_tokens = set()
-
 
 # ------------------- MODELS -------------------
 
@@ -2038,7 +2036,7 @@ def mes_participations():
 
 #recu de paiement (vu par donateur et association)
 from flask import make_response, jsonify
-from xhtml2pdf import pisa
+
 from io import BytesIO
 import base64, os
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -2047,6 +2045,10 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 @app.route('/recu-pdf/<int:id_participation>', methods=['GET'])
 @jwt_required()
 def generate_recu_pdf(id_participation):
+    try:
+        from xhtml2pdf import pisa   
+    except Exception as e:
+        return jsonify({"error": "PDF engine not available", "details": str(e)}), 503
     participation = Participation.query.get(id_participation)
     if not participation:
         return jsonify({"error": "Participation introuvable"}), 404
@@ -2285,9 +2287,8 @@ from transformers import CLIPProcessor, CLIPModel
 import torch
 from PIL import Image
 import numpy as np
-
-#  face detection/embedding
 from facenet_pytorch import MTCNN, InceptionResnetV1
+
 
 # === Configuration & model setup (as before) ===
 MODEL_NAME      = "openai/clip-vit-base-patch32"
