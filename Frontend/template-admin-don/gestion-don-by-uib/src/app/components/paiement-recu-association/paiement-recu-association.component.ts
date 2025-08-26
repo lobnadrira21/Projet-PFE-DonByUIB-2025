@@ -4,7 +4,7 @@ import { Component, OnInit } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { AuthService } from 'app/services/auth.service';
 import { MatDialog } from '@angular/material/dialog';
-import { OcrModalFileComponent } from '../../modals/ocr-modal-file/ocr-modal-file.component';
+
 
 @Component({
   selector: 'app-paiement-recu-association',
@@ -31,23 +31,7 @@ export class PaiementRecuAssociationComponent implements OnInit {
 
 
 
-extraireTexteOCR(participationId: number) {
-  this.http.get<any>(`http://127.0.0.1:5000/ocr-recu/${participationId}`).subscribe({
-  next: res => {
-    const structured = res.structured_data;
-    structured["id_participation"] = participationId; 
-    this.dialog.open(OcrModalFileComponent, {
-      data: structured,
-      width: '450px'
-    });
-  },
-  error: err => {
-    console.error("Erreur OCR :", err);
-    alert("Erreur lors de l'OCR.");
-  }
-});
 
-}
 
 
 }

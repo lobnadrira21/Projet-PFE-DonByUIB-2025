@@ -2,17 +2,20 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { Router } from '@angular/router';
 import { AuthService } from 'app/services/auth.service';
-
+import { MatCardModule } from '@angular/material/card';
 @Component({
   selector: 'app-modifierprofil',
   standalone: true,
   imports: [ MatFormFieldModule,  // ✅ Import Material Form Field
       MatInputModule,      // ✅ Import Material Input
       MatButtonModule,
-      ReactiveFormsModule,],
+      ReactiveFormsModule,
+      MatIconModule,
+      MatCardModule],
   templateUrl: './modifierprofil.component.html',
   styleUrl: './modifierprofil.component.scss'
 })
@@ -20,6 +23,8 @@ export class ModifierprofilComponent implements OnInit {
  profileForm!: FormGroup;
   message = '';
   extractedData: any = null;
+  showOld = false;
+showNew = false;
 
 
   constructor(private fb: FormBuilder, private authService: AuthService, private router: Router) {}
@@ -65,5 +70,8 @@ export class ModifierprofilComponent implements OnInit {
       }
     });
   }
-
+resetForm() {
+  
+  this.profileForm.reset(this.profileForm.getRawValue());
+}
 }

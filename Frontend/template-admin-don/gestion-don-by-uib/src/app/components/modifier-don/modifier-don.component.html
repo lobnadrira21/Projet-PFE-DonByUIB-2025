@@ -1,74 +1,71 @@
-<div class="main-content">
-    <div class="container-fluid">
-      <div class="row justify-content-center">
-  
-        <!-- 🖼️ Image Preview + Upload -->
-        <div class="col-md-4">
-          <div class="card card-profile">
-            <div class="card-avatar">
-              <a href="javascript:void(0)">
-                <img class="img" [src]="imagePreview || 'assets/img/don-default.png'" />
-              </a>
-            </div>
-            <div class="card-body">
-              <h4 class="card-title">{{ donForm.value.titre }}</h4>
-              <input type="file" (change)="onFileSelected($event)" accept="image/*" class="form-control mt-2">
-            </div>
+<div class="page">
+  <mat-card class="don-card">
+    <div class="layout">
+      <!-- Gauche : image + upload -->
+      <aside class="side">
+        <img
+          class="cover"
+          [src]="imagePreview || currentPhoto || 'assets/img/don-default.png'"
+          alt="Photo du don"
+        />
+
+        <div class="title">{{ donForm.value.titre || 'Titre du don' }}</div>
+
+        <button mat-stroked-button type="button" (click)="fileInput.click()">
+          <mat-icon>photo_camera</mat-icon>&nbsp;Changer l’image
+        </button>
+        <input
+          #fileInput
+          hidden
+          type="file"
+          accept="image/*"
+          (change)="onFileSelected($event)"
+        />
+      </aside>
+
+      <!-- Droite : formulaire -->
+      <section class="content">
+        <h2>Modifier Don</h2>
+        <p class="subtitle">Tu peux modifier les détails du don ici.</p>
+
+        <form class="form-grid" [formGroup]="donForm" (ngSubmit)="onSubmit()">
+          <mat-form-field appearance="outline">
+            <mat-label>Titre*</mat-label>
+            <input matInput formControlName="titre" />
+            <mat-error *ngIf="donForm.get('titre')?.hasError('required')">Titre requis</mat-error>
+            <mat-error *ngIf="donForm.get('titre')?.hasError('minlength')">3 caractères min.</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Objectif (TND)</mat-label>
+            <input matInput type="number" step="0.01" min="1" formControlName="objectif" />
+            <mat-error *ngIf="donForm.get('objectif')?.hasError('required')">Objectif requis</mat-error>
+            <mat-error *ngIf="donForm.get('objectif')?.hasError('min')">Doit être ≥ 1</mat-error>
+          </mat-form-field>
+
+          <mat-form-field class="full" appearance="outline">
+            <mat-label>Description</mat-label>
+            <textarea matInput rows="5" formControlName="description"></textarea>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Date fin de collecte</mat-label>
+            <input matInput [matDatepicker]="picker" formControlName="date_fin_collecte" />
+            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+            <mat-error *ngIf="donForm.get('date_fin_collecte')?.hasError('required')">
+              Date requise
+            </mat-error>
+          </mat-form-field>
+
+          <div class="actions full">
+            <button mat-stroked-button type="button" (click)="cancel()">Annuler</button>
+            <button mat-flat-button color="primary" type="submit" [disabled]="donForm.invalid || donForm.pristine">
+              Enregistrer
+            </button>
           </div>
-        </div>
-  
-        <!-- 📝 Formulaire -->
-        <div class="col-md-8">
-          <div class="card">
-            <div class="card-header card-header-danger">
-              <h4 class="card-title">Modifier Don</h4>
-              <p class="card-category">Tu peux modifier les détails du don ici</p>
-            </div>
-            <div class="card-body">
-              <form [formGroup]="donForm" (ngSubmit)="onSubmit()">
-  
-                <div class="row">
-                  <div class="col-md-6">
-                    <mat-form-field class="example-full-width">
-                      <input matInput placeholder="Titre" formControlName="titre">
-                    </mat-form-field>
-                  </div>
-  
-                  <div class="col-md-6">
-                    <mat-form-field class="example-full-width">
-                      <input matInput placeholder="Objectif (TND)" type="number" formControlName="objectif">
-                    </mat-form-field>
-                  </div>
-                </div>
-  
-                <div class="row">
-                  <div class="col-md-12">
-                    <mat-form-field class="example-full-width">
-                      <textarea matInput placeholder="Description" formControlName="description"></textarea>
-                    </mat-form-field>
-                  </div>
-                </div>
-  
-                <div class="row">
-                  <div class="col-md-6">
-                    <mat-form-field class="example-full-width">
-                      <input matInput type="date" placeholder="Date fin collecte" formControlName="date_fin_collecte">
-                    </mat-form-field>
-                  </div>
-                </div>
-  
-                <!-- Submit -->
-                <button mat-raised-button color="warn" type="submit" class="pull-right" [disabled]="donForm.invalid">
-                  Modifier le Don
-                </button>
-  
-                <div class="clearfix"></div>
-              </form>
-            </div>
-          </div>
-        </div>
-  
-      </div>
+        </form>
+      </section>
     </div>
-  </div>
-  
+  </mat-card>
+</div>

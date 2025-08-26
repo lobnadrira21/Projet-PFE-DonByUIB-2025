@@ -7,7 +7,9 @@ import { AuthService } from 'app/services/auth.service';
 import { Router } from '@angular/router';
 import { TypeAssociation } from 'app/models/type-association.model';
 import { MatSelectModule } from '@angular/material/select';
-
+import { MatIconModule } from '@angular/material/icon';
+import { MatCardModule } from '@angular/material/card';
+import { MatDividerModule } from '@angular/material/divider';
 @Component({
   selector: 'app-user-profile',
   standalone:true,
@@ -19,7 +21,10 @@ import { MatSelectModule } from '@angular/material/select';
     MatButtonModule,
     ReactiveFormsModule,
     MatSelectModule,
-FormsModule
+FormsModule,
+MatIconModule,
+MatCardModule,
+MatDividerModule
   ]
 })
 export class UserProfileComponent implements OnInit {
@@ -31,6 +36,8 @@ typesAssociation: string[] = Object.values(TypeAssociation);
   gouvernorats: any[] = [];
 selectedGouvernoratId: number | null = null;
 gouvernorat_id: [''] //
+showOld = false;
+showNew = false;
 
   constructor(private authService: AuthService, private fb: FormBuilder,private router: Router) {}
 
@@ -157,5 +164,7 @@ if (gouvernoratId) {
     }
   );
 }
-
+resetForm() {
+  this.profileForm.reset(this.profileForm.getRawValue());
+}
 }

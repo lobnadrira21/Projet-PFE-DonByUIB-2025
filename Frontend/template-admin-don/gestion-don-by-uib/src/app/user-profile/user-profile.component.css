@@ -1,9 +1,89 @@
-
-
-.card-profile {
-    text-align: center;
+/* Conteneur principal */
+.assoc-card {
+  max-width: 1120px;
+  margin: 24px auto;
+  padding: 0;
+  margin-top: 4%;
 }
 
-.card-avatar {
-    margin-top: -50px;
+/* Deux colonnes : gauche fixe, droite fluide */
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+}
+
+/* Colonne gauche */
+.side {
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+
+  .avatar {
+    width: 140px;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    background: #f5f5f5;
+  }
+  .name { margin: 8px 0 0; font-weight: 700; text-align: center; }
+  .email { margin: 0; color: #607d8b; font-size: 13px; text-align: center; }
+}
+
+/* Colonne droite */
+.content {
+  padding: 24px;
+
+  h2 { margin: 0 0 6px; font-weight: 800; }
+  .subtitle { margin: 0 0 18px; color: #607d8b; }
+}
+
+/* Grille des champs : 2 colonnes */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+
+  .section {
+    grid-column: 1 / -1;
+    margin: 6px 0 2px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #37474f;
+  }
+
+  .full { grid-column: 1 / -1; }   /* élément sur toute la ligne */
+
+  mat-form-field { width: 100%; }
+
+  .file-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-top: 1px dashed rgba(0,0,0,.08);
+
+    .file-label { color: #455a64; }
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+}
+
+.info {
+  margin-top: 16px;
+  background: #e3f2fd;
+  color: #0d47a1;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: 1fr; }
 }

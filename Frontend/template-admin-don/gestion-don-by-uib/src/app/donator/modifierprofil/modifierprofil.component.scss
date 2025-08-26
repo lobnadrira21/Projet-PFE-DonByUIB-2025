@@ -1,9 +1,65 @@
-
-
-.card-profile {
-    text-align: center;
+.profile-card {
+  max-width: 920px;
+  margin: 24px auto;
+  padding: 0;
 }
 
-.card-avatar {
-    margin-top: -50px;
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  background: linear-gradient(90deg, #ef5350, #e53935);
+  color: #fff;
+
+  .avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    display: grid; place-items: center;
+    mat-icon { font-size: 32px; line-height: 32px; }
+  }
+  .titles h2 { margin: 0 0 4px; font-weight: 600; }
+  .titles p  { margin: 0; opacity: .9; }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+  padding: 24px;
+
+  .section-title {
+    grid-column: 1 / -1;
+    margin: 8px 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #37474f;
+  }
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+  }
+}
+
+.info-msg {
+  margin: 0 24px 20px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #e3f2fd;
+  color: #0d47a1;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .form-grid { grid-template-columns: 1fr; }
 }

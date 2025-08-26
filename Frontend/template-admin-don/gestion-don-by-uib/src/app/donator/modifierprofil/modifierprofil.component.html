@@ -2,59 +2,72 @@
   <div class="container-fluid">
     <div class="row justify-content-center">
       <div class="col-md-8 user-profile-container">
-        <div class="card">
-          <div class="card-header card-header-danger">
-            <h4 class="card-title">Modifier Profil Donateur</h4>
-          </div>
-          <div class="card-body">
-            <form [formGroup]="profileForm" (ngSubmit)="updateProfileDonator()">
-              <div class="row">
-                <div class="col-md-6">
-                  <mat-form-field class="example-full-width">
-                    <input matInput placeholder="Nom complet" formControlName="nom_complet">
-                  </mat-form-field>
-                </div>
-                <div class="col-md-6">
-                  <mat-form-field class="example-full-width">
-                    <input matInput placeholder="Email" formControlName="email">
-                  </mat-form-field>
-                </div>
-              </div>
+        
+      <mat-card class="profile-card">
+  <div class="profile-header">
+    <div class="avatar">
+      <mat-icon>person</mat-icon>
+    </div>
+    <div class="titles">
+      <h2>Modifier Profil Donateur</h2>
+      <p>Mettre à jour des informations personnelles.</p>
+    </div>
+  </div>
 
-              <div class="row">
-                <div class="col-md-6">
-                  <mat-form-field class="example-full-width">
-                    <input matInput placeholder="Téléphone" formControlName="telephone">
-                  </mat-form-field>
-                </div>
-              </div>
+  <form [formGroup]="profileForm" (ngSubmit)="updateProfileDonator()" class="form-grid">
 
-             
+    <h3 class="section-title">Informations personnelles</h3>
 
-              <div class="row mt-3">
-                <div class="col-md-6">
-                  <mat-form-field class="example-full-width">
-                    <input matInput placeholder="Ancien mot de passe" formControlName="old_password" type="password">
-                  </mat-form-field>
-                </div>
-                <div class="col-md-6">
-                  <mat-form-field class="example-full-width">
-                    <input matInput placeholder="Nouveau mot de passe" formControlName="new_password" type="password">
-                  </mat-form-field>
-                </div>
-              </div>
+    <mat-form-field appearance="outline">
+      <mat-label>Nom complet</mat-label>
+      <input matInput formControlName="nom_complet">
+      <mat-icon matSuffix>badge</mat-icon>
+    </mat-form-field>
 
-              <button mat-raised-button type="submit" class="btn btn-danger pull-right" [disabled]="profileForm.invalid">
-                Mettre à jour le profil
-              </button>
-              <div class="clearfix"></div>
-            </form>
+    <mat-form-field appearance="outline">
+      <mat-label>Email</mat-label>
+      <input matInput type="email" formControlName="email">
+      <mat-icon matSuffix>alternate_email</mat-icon>
+    </mat-form-field>
 
-            <p *ngIf="message" class="alert alert-info mt-3">{{ message }}</p>
+    <mat-form-field appearance="outline">
+      <mat-label>Téléphone</mat-label>
+      <input matInput formControlName="telephone" maxlength="8">
+      <mat-icon matSuffix>call</mat-icon>
+      <mat-hint align="end">{{ (profileForm.get('telephone')?.value || '').length }}/8</mat-hint>
+    </mat-form-field>
 
-           
-          </div>
-        </div>
+    <h3 class="section-title">Sécurité</h3>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Ancien mot de passe</mat-label>
+      <input matInput [type]="showOld ? 'text' : 'password'" formControlName="old_password">
+      <button mat-icon-button matSuffix type="button" (click)="showOld = !showOld">
+        <mat-icon>{{ showOld ? 'visibility_off' : 'visibility' }}</mat-icon>
+      </button>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Nouveau mot de passe</mat-label>
+      <input matInput [type]="showNew ? 'text' : 'password'" formControlName="new_password">
+      <button mat-icon-button matSuffix type="button" (click)="showNew = !showNew">
+        <mat-icon>{{ showNew ? 'visibility_off' : 'visibility' }}</mat-icon>
+      </button>
+      <mat-hint>6+ caractères, 1 maj., 1 chiffre, 1 spécial</mat-hint>
+    </mat-form-field>
+
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="resetForm()">Annuler</button>
+      <button mat-flat-button color="primary" type="submit"
+              [disabled]="profileForm.invalid || profileForm.pristine">
+        Enregistrer
+      </button>
+    </div>
+  </form>
+
+  <p *ngIf="message" class="info-msg">{{ message }}</p>
+</mat-card>
+
       </div>
     </div>
   </div>

@@ -1995,7 +1995,7 @@ def get_paiements_association():
                 "id_participation": p.id_participation,
                 "titre_don": p.don.titre,
                 "montant": p.montant,
-                "date": p.date_participation.strftime("%d/%m/%Y"),
+                "date": p.date_participation.isoformat(),
                 "donateur": p.user.nom_complet if p.user else "Utilisateur inconnu"
             })
 
@@ -2065,6 +2065,7 @@ def generate_recu_pdf(id_participation):
     html = f"""
     <html>
       <head>
+      <meta charset="utf-8" />
         <style>
           body {{ font-family: Arial, sans-serif; padding: 20px; }}
           .header {{ text-align: center; }}
@@ -2150,55 +2151,6 @@ def get_historique_donateur():
         return jsonify({"error": str(e)}), 500
     
 
-    # tesseract
-
-from flask import jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-import pytesseract
-from pdf2image import convert_from_bytes
-import re
-
-
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-@app.route("/ocr-recu/<int:id_participation>", methods=["GET"])
-@jwt_required()
-def ocr_recu(id_participation):
-    try:
-        # 📄 Générer le reçu PDF existant via la fonction
-        pdf_response = generate_recu_pdf(id_participation)
-        if pdf_response.status_code != 200:
-            return pdf_response
-
-        # 📥 Lire le contenu PDF en bytes
-        pdf_data = pdf_response.get_data()
-
-        # 🖼️ Convertir en image avec poppler path
-        images = convert_from_bytes(pdf_data, poppler_path=r"D:\Popper\poppler-24.08.0\Library\bin")
-
-        if not images:
-            return jsonify({"error": "Échec de conversion PDF -> image"}), 400
-
-        # 🔍 Appliquer OCR
-        text = pytesseract.image_to_string(images[0], lang="fra")
-
-        # 🔎 Extraire les données structurées
-        infos = {
-            "donateur": re.search(r"Nom du Donateur\s*:\s*(.+)", text),
-            "email": re.search(r"Email\s*:\s*(.+)", text),
-            "campagne": re.search(r"Campagne\s*:\s*(.+)", text),
-            "montant": re.search(r"Montant\s*:\s*([\d,.]+)", text),
-            "date": re.search(r"Date\s*:\s*(\d{2}/\d{2}/\d{4})", text)
-        }
-        structured = {k: (m.group(1).strip() if m else None) for k, m in infos.items()}
-
-        return jsonify({
-            "extracted_text": text,
-            "structured_data": structured
-        }), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 # stat admin
