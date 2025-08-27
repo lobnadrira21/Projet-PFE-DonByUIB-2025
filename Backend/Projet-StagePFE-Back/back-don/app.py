@@ -40,8 +40,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'lobnadrira21@gmail.com'
-app.config['MAIL_PASSWORD'] = 'afyw aypt zoqx mrvj'   
+app.config['MAIL_USERNAME'] = 'donbyuib@gmail.com'
+app.config['MAIL_PASSWORD'] = 'sewi joqt yjhw fqqu'   
 app.config['MAIL_DEFAULT_SENDER'] = 'DonByUIB <admin@donbyuib.tn>'
 
 mail = Mail(app)
@@ -454,16 +454,16 @@ def reset_password():
     return jsonify({"message": "Mot de passe réinitialisé avec succès."}), 200
 
 
-
-
-
-
-
 # reset + verification with email
 @app.route("/request-password-reset", methods=["POST"])
 def request_password_reset():
     data = request.get_json()
     email = data.get("email")
+
+    FRONTEND_WEB = os.getenv("FRONTEND_WEB", "http://localhost:4200")
+    FRONTEND_IONIC = os.getenv("FRONTEND_IONIC", "http://localhost:8100")
+    USE_HASH = os.getenv("USE_HASH_ROUTING", "true").lower() == "true"
+    RESET_PATH = "/#/reset-password" if USE_HASH else "/reset-password"
 
     user = User.query.filter_by(email=email).first()
     if not user:
@@ -472,18 +472,26 @@ def request_password_reset():
     # Générer token temporaire (valide 30 min)
     token = create_access_token(identity=str(user.id), expires_delta=timedelta(minutes=30))
 
-
-    reset_link = f"http://localhost:4200/#/reset-password/{token}"
-
+    link_web = f"{FRONTEND_WEB}{RESET_PATH}/{token}"
+    link_ionic = f"{FRONTEND_IONIC}{RESET_PATH}/{token}"
 
     # Envoyer l'email
-    msg = Message("Réinitialisation du mot de passe", sender=app.config['MAIL_USERNAME'], recipients=[email])
+    msg = Message(
+        "Réinitialisation du mot de passe",
+        sender=app.config['MAIL_USERNAME'],
+        recipients=[email]
+    )
 
-    msg.body = f"Bonjour,\n\nCliquez ici pour réinitialiser votre mot de passe : {reset_link}\n\nCe lien expire dans 30 minutes."
+    msg.body = (
+        "Bonjour,\n\n"
+        "Réinitialisez votre mot de passe avec l’un de ces liens :\n"
+        f"- Web (Angular) : {link_web}\n"
+        f"- Ionic (mobile) : {link_ionic}\n\n"
+        "Le lien expire dans 30 minutes."
+    )
+
     mail.send(msg)
-
     return jsonify({"message": "Un lien de réinitialisation a été envoyé à votre email."}), 200
-
 
 
 @app.route("/create-association", methods=["POST"])
