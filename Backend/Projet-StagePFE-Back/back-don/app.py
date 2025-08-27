@@ -1445,7 +1445,7 @@ def participate(id_don):
         db.session.add(notif)
 
         db.session.commit()
-
+        send_congrats_email(user, don, montant)
         return jsonify({
             "message": "✅ Participation enregistrée avec succès.",
             "nom_complet": user.nom_complet,
@@ -1455,7 +1455,39 @@ def participate(id_don):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    
+    # mail de félicitation après la participation
 
+def send_congrats_email(user, don, montant):
+    try:
+        msg = Message(
+            subject="Merci pour votre contribution ❤️",
+            recipients=[user.email],
+            sender=app.config['MAIL_USERNAME']  # => donbyuib@gmail.com
+        )
+        # Texte brut
+        msg.body = (
+            f"Bonjour {user.nom_complet},\n\n"
+            f"Merci pour votre don de {float(montant):.2f} TND pour « {don.titre} ».\n"
+            f"Montant collecté : {float(don.montant_collecte):.2f} / {float(don.objectif):.2f} TND\n"
+            f"Association : {getattr(don.association, 'nom_complet', '—')}\n\n"
+            "Votre geste compte énormément. Merci !\n\n"
+            "— L’équipe DonByUIB"
+        )
+        # Version HTML (facultatif mais recommandé)
+        msg.html = f"""
+        <p>Bonjour <strong>{user.nom_complet}</strong>,</p>
+        <p>Merci pour votre don de <strong>{float(montant):.2f} TND</strong> pour « <strong>{don.titre}</strong> ».</p>
+        <p>Montant collecté : <strong>{float(don.montant_collecte):.2f} / {float(don.objectif):.2f} TND</strong><br/>
+        Association : <strong>{getattr(don.association, 'nom_complet', '—')}</strong></p>
+        <p>Votre geste compte énormément. Merci 🙏</p>
+        <p>— L’équipe DonByUIB</p>
+        """
+        mail.send(msg)
+    except Exception as e:
+        app.logger.exception("Échec d’envoi de l’email de félicitations")
+
+# conter le nombre de participations 
 @app.route("/don-participants", methods=["GET"])
 def get_don_participants():
     try:
