@@ -258,3 +258,43 @@
     </div>
   </div>
 </ng-container>
+
+<!-- OTP Modal -->
+<ng-container *ngIf="showOtpModal">
+  <div class="modal-backdrop fade show"></div>
+  <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Vérification par code</h5>
+          <button type="button" class="close" aria-label="Close" (click)="showOtpModal=false">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <p>Nous avons envoyé un code à <strong>{{ email }}</strong>. Entrez le code à 6 chiffres pour activer votre compte.</p>
+
+          <mat-form-field appearance="outline" style="width:100%;">
+            <mat-label>Code OTP</mat-label>
+            <input matInput maxlength="6" [(ngModel)]="otpCode" placeholder="123456" />
+          </mat-form-field>
+
+          <div *ngIf="otpError" class="alert alert-danger mt-2">{{ otpError }}</div>
+
+          <button mat-stroked-button (click)="resendOtp()" [disabled]="resendDisabled" class="mt-2">
+            Renvoyer le code <span *ngIf="resendDisabled">({{resendCountdown}}s)</span>
+          </button>
+        </div>
+
+        <div class="modal-footer">
+          <button mat-button (click)="showOtpModal=false" [disabled]="otpSending">Annuler</button>
+          <button mat-raised-button color="primary" (click)="confirmOtp()" [disabled]="otpSending">
+            {{ otpSending ? 'Vérification…' : 'Confirmer' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-container>
+

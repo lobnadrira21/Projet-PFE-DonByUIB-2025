@@ -45,7 +45,16 @@ export class RegisterComponent implements OnInit, OnDestroy {
   userCaptchaInput = '';
   hideTelError = false;
   hidePwdError = false;
+  // vérification otp
+  showOtpModal = false;
+otpCode = '';
+otpError = '';
+otpSending = false;
 
+// petit cooldown pour "Renvoyer le code otp"
+resendDisabled = false;
+resendCountdown = 60;
+resendIntervalId: any = null;
   // ─── flow de vérification ────────────────────────────────────────
   faceVerified = false;
   sessionId: string | null = null;
@@ -94,6 +103,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopCamera();
+    this.clearResendCooldown();
   }
 
   // ── Ouvrir / fermer modals ───────────────────────────────────────
@@ -419,26 +429,99 @@ private waitForVideoFrame(video: HTMLVideoElement): Promise<void> {
     };
 
     this.authService.register(userData).subscribe({
-      next: response => {
-        if (response.access_token) {
-          this.authService.saveToken(
-            response.access_token,
-            response.role,
-            response.username
-          );
-        }
-        if (response.role === 'donator') {
-          this.router.navigate(['/dashboard-donator']);
-        } else {
-          this.router.navigate(['/login']);
-        }
-      },
+      next: (response) => {
+      // ✅ NO TOKEN ici si need_verification = true (nouveau back)
+      if (response?.need_verification) {
+        this.showOtpModal = true;
+        this.startResendCooldown(); // démarrer le timer "renvoyer"
+        return;
+      }
+
+      // compat: si jamais tu redonnes un token directement (pas conseillé)
+      if (response?.access_token) {
+        this.authService.saveToken(response.access_token, response.role, response.username);
+        this.router.navigate([response.role === 'donator' ? '/dashboard-donator' : '/login']);
+      }
+    },
       error: error => {
         console.error('Registration failed:', error);
         this.errorMessage = error.error?.error || 'Une erreur est survenue.';
       }
     });
   }
+confirmOtp() {
+  this.otpError = '';
+  if (!/^\d{6}$/.test(this.otpCode.trim())) {
+    this.otpError = 'Le code OTP doit contenir 6 chiffres.';
+    return;
+  }
+  this.otpSending = true;
+
+  this.authService.verifyOtp(this.email.trim().toLowerCase(), this.otpCode.trim()).subscribe({
+    next: (res) => {
+      this.otpSending = false;
+      // le back renvoie { access_token, message, ... }
+      if (res?.access_token) {
+        this.showOtpModal = false;
+        this.clearResendCooldown();
+        this.authService.saveToken(res.access_token, this.role, this.nom_complet);
+        // redirige le donateur
+        if (this.role === 'donator') {
+          this.router.navigate(['/dashboard-donator']);
+        } else {
+          this.router.navigate(['/login']);
+        }
+      } else {
+        this.otpError = 'Réponse inattendue du serveur.';
+      }
+    },
+    error: (err) => {
+      this.otpSending = false;
+      this.otpError =
+        err?.error?.error ||
+        err?.error?.message ||
+        'Code invalide ou expiré.';
+    }
+  });
+}
+resendOtp() {
+  if (this.resendDisabled) return;
+  this.resendDisabled = true;
+
+  this.authService.resendOtp(this.email.trim().toLowerCase()).subscribe({
+    next: () => {
+      this.otpError = '';
+      this.resendCountdown = 60;
+      this.startResendCooldown();
+    },
+    error: (err) => {
+      this.otpError = err?.error?.error || 'Échec de renvoi. Réessayez.';
+      this.resendDisabled = false; // autoriser si erreur
+    }
+  });
+}
+
+startResendCooldown() {
+  this.resendDisabled = true;
+  this.clearResendCooldown();
+  this.resendIntervalId = setInterval(() => {
+    this.resendCountdown -= 1;
+    if (this.resendCountdown <= 0) {
+      this.clearResendCooldown();
+    }
+  }, 1000);
+}
+
+clearResendCooldown() {
+  this.resendDisabled = false;
+  this.resendCountdown = 60;
+  if (this.resendIntervalId) {
+    clearInterval(this.resendIntervalId);
+    this.resendIntervalId = null;
+  }
+}
+
+
 
   // ── divers helpers ───────────────────────────────────────────────
   goToHome() { this.router.navigate(['/']); }

@@ -32,7 +32,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["JWT_SECRET_KEY"] = '473f7e8c82ad4f2aae3704006097205f'
-
+app.config["JWT_ACCESS_TOKEN_EXPIRES"]  = timedelta(minutes=20)
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=14)
+app.config["JWT_HEADER_TYPE"] = "Bearer"
 # Files & mail (don’t commit real secrets)
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -84,6 +86,14 @@ class User(db.Model):
     adresse = db.Column(db.String(255), nullable=True)
     profession = db.Column(db.String(100), nullable=True)
 
+ 
+    is_verified = db.Column(db.Boolean, default=False)
+
+# OTP
+    otp_code = db.Column(db.String(6), nullable=True)
+    otp_expires_at = db.Column(db.DateTime, nullable=True)
+    otp_attempts = db.Column(db.Integer, default=0)     # sécurité (limiter tentatives)
+    otp_last_sent = db.Column(db.DateTime, nullable=True)  # anti-spam resend
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -288,6 +298,7 @@ def is_strong_password(password):
     return bool(re.fullmatch(r"^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$", password))
 
 
+from flask_jwt_extended import create_access_token, create_refresh_token
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -321,28 +332,121 @@ def register():
         return jsonify({"error": "Rôle invalide."}), 400
 
     #  Création de l'utilisateur
-    user = User(email=email, role=role, nom_complet=nom_complet, telephone=telephone)
+    user = User(email=email, role=role, nom_complet=nom_complet, telephone=telephone, is_verified=False)
     user.set_password(password)
+
+    code = generate_otp_code()
+    user.otp_code = code
+    user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
+    user.otp_attempts = 0
+    user.otp_last_sent = datetime.utcnow()
 
     db.session.add(user)
     db.session.commit()
-
-    #  Génération du token JWT
-    additional_claims = {
-        "email": user.email,
-        "role": user.role
-    }
-
-    access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+    send_otp_email(user, code)
 
     #  Réponse complète
     return jsonify({
-        "access_token": access_token,
-        "role": user.role,
-        "username": user.nom_complet
+        "message": "Compte créé. Un code OTP vous a été envoyé par email. Veuillez vérifier votre compte.",
+        "need_verification": True
     }), 201
+# helpers otp 
+import secrets
+from datetime import datetime, timedelta
 
-    
+def generate_otp_code(n=6):
+    # 6 chiffres aléatoires, sans zéros en tête “coupés”
+    return f"{secrets.randbelow(10**n):0{n}d}"
+
+def send_otp_email(user, code):
+    try:
+        msg = Message(
+            subject="Votre code de vérification DonByUIB",
+            recipients=[user.email],
+            sender=app.config['MAIL_USERNAME']
+        )
+        msg.body = (
+            f"Bonjour {user.nom_complet or ''},\n\n"
+            f"Votre code de vérification est : {code}\n"
+            f"Il expire dans 10 minutes.\n\n"
+            "— L’équipe DonByUIB"
+        )
+        mail.send(msg)
+    except Exception:
+        app.logger.exception("Échec envoi OTP")
+
+#vérifier otp
+@app.route("/verify-otp", methods=["POST"])
+def verify_otp():
+    data = request.get_json()
+    email = data.get("email")
+    code = data.get("code")
+
+    if not email or not code:
+        return jsonify({"error": "Email et code sont requis."}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "Utilisateur introuvable."}), 404
+
+    if user.is_verified:
+        return jsonify({"message": "Compte déjà vérifié."}), 200
+
+    # sécurité de base : limiter à 5 tentatives
+    if user.otp_attempts is not None and user.otp_attempts >= 5:
+        return jsonify({"error": "Trop de tentatives. Demandez un nouveau code."}), 429
+
+    if not user.otp_code or not user.otp_expires_at or datetime.utcnow() > user.otp_expires_at:
+        return jsonify({"error": "Code expiré. Demandez un nouveau code."}), 410
+
+    if code.strip() != user.otp_code:
+        user.otp_attempts = (user.otp_attempts or 0) + 1
+        db.session.commit()
+        return jsonify({"error": "Code invalide."}), 401
+
+    # Succès : marquer vérifié et nettoyer les champs OTP
+    user.is_verified = True
+    user.otp_code = None
+    user.otp_expires_at = None
+    user.otp_attempts = 0
+    db.session.commit()
+
+    # On peut maintenant créer un access token classique
+    additional_claims = {"email": user.email, "role": user.role}
+    access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+
+    return jsonify({"message": "Compte vérifié avec succès.", "access_token": access_token}), 200
+# renvoyer otp 
+@app.route("/resend-otp", methods=["POST"])
+def resend_otp():
+    data = request.get_json()
+    email = data.get("email")
+    if not email:
+        return jsonify({"error": "Email requis."}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "Utilisateur introuvable."}), 404
+
+    if user.is_verified:
+        return jsonify({"message": "Compte déjà vérifié."}), 200
+
+    # Anti-spam : 60s de cooldown + max 5 envois par heure (simple)
+    now = datetime.utcnow()
+    if user.otp_last_sent and (now - user.otp_last_sent) < timedelta(seconds=60):
+        return jsonify({"error": "Veuillez patienter avant de renvoyer un code."}), 429
+
+    code = generate_otp_code()
+    user.otp_code = code
+    user.otp_expires_at = now + timedelta(minutes=10)
+    user.otp_attempts = 0
+    user.otp_last_sent = now
+
+    db.session.commit()
+    send_otp_email(user, code)
+
+    return jsonify({"message": "Nouveau code envoyé."}), 200
+
 # captcha register
 from captcha.image import ImageCaptcha
 import random
@@ -374,6 +478,21 @@ def get_info_donator():
         "nom_complet": user.nom_complet,
         "email": user.email
     })
+# refresh token pour regénérer un access token 
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, create_access_token
+
+@app.route("/refresh", methods=["POST"])
+@jwt_required(refresh=True)
+def refresh():
+    # tu peux aussi vérifier le blocklist via ton loader existant
+    identity = get_jwt_identity()
+    claims   = get_jwt()  # contient aussi email/role si tu les as mis dans refresh
+    new_access = create_access_token(
+        identity=identity,
+        additional_claims={"email": claims.get("email"), "role": claims.get("role")}
+    )
+    return jsonify({"access_token": new_access}), 200
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -385,6 +504,12 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not user.check_password(password):
         return jsonify({"error": "Identifiants invalides"}), 401
+    if not user.is_verified:
+    # Option: renvoyer un indicateur côté front pour afficher l’écran OTP
+         return jsonify({
+        "error": "Votre compte n'est pas encore vérifié.",
+        "need_verification": True
+    }), 403
 
     # 🧠 Récupération du nom selon le rôle
     username = None
@@ -395,17 +520,12 @@ def login():
     else:
         username = user.nom_complet
 
-    # ✅ Claims ajoutés dans le token JWT
-    additional_claims = {
-        "email": user.email,
-        "role": user.role   # 🔴 Très important pour vérifier plus tard (donator, association...)
-    }
+    
+    additional_claims = {"email": user.email, "role": user.role}
+    access_token  = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+    refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
 
-    # 🪪 Création du token d’accès avec claims
-    access_token = create_access_token(
-        identity=str(user.id),
-        additional_claims=additional_claims
-    )
+
 
     # 🔧 Pour debug (facultatif)
     print("✅ Connexion réussie pour :", user.email)
@@ -414,6 +534,7 @@ def login():
     # ✅ Réponse finale
     return jsonify({
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "role": user.role,
         "username": username
     }), 200

@@ -83,6 +83,16 @@ register(userData: any): Observable<any> {
   return this.http.post<any>(`${this.apiUrl}/register`, userData);
 }
 
+// vérifier otp
+verifyOtp(email: string, code: string) {
+  return this.http.post<any>(`${this.apiUrl}/verify-otp`, { email, code });
+}
+// renvoie otp après 60 s
+resendOtp(email: string) {
+  return this.http.post<any>(`${this.apiUrl}/resend-otp`, { email });
+}
+
+
 /** Upload CIN → attend { ok:true, session_id } */
 verifyCin(cinFile: File): Observable<any> {
   const url = `${this.apiUrl}/verify-cin`;
