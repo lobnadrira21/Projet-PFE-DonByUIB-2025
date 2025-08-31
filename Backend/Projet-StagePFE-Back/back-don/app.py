@@ -52,16 +52,6 @@ migrate = Migrate(app, db)
 jwt = JWTManager(app)
 revoked_tokens = set()
 
-# Truly lazy ML import
-def get_ml():
-    if IS_UNIT:
-        return None, None, None, None
-    try:
-        from transformers import CLIPProcessor, CLIPModel
-        from facenet_pytorch import MTCNN, InceptionResnetV1
-        return CLIPProcessor, CLIPModel, MTCNN, InceptionResnetV1
-    except Exception:
-        return None, None, None, None
 
 # ------------------- MODELS -------------------
 
