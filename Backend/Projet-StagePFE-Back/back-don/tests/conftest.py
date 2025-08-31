@@ -35,10 +35,18 @@ if "torch" not in sys.modules:
 # (optional) facenet_pytorch stub if app imports it
 if "facenet_pytorch" not in sys.modules:
     f = types.ModuleType("facenet_pytorch")
-    class _M: pass
-    class _R: pass
-    f.MTCNN = _M
-    f.InceptionResnetV1 = _R
+
+    class MTCNN:
+        def __init__(self, *args, **kwargs): pass
+        def __call__(self, *args, **kwargs): return []  # pretend no faces
+
+    class InceptionResnetV1:
+        def __init__(self, *args, **kwargs): pass
+        def to(self, *args, **kwargs): return self
+        def eval(self, *args, **kwargs): return self
+
+    f.MTCNN = MTCNN
+    f.InceptionResnetV1 = InceptionResnetV1
     sys.modules["facenet_pytorch"] = f
 
 import pytest
