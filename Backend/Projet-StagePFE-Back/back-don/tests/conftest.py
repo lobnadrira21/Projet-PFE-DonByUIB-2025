@@ -9,11 +9,16 @@ if "transformers" not in sys.modules:
     t.CLIPModel = _Dummy
     sys.modules["transformers"] = t
 
-# NEW: stub torch so 'import torch' at module top doesn't fail
+# torch stub with .cuda.is_available() -> False
 if "torch" not in sys.modules:
-    sys.modules["torch"] = types.ModuleType("torch")
+    torch_stub = types.ModuleType("torch")
+    class _Cuda:
+        @staticmethod
+        def is_available(): return False
+    torch_stub.cuda = _Cuda()
+    sys.modules["torch"] = torch_stub
 
-# (Optional) stub facenet_pytorch too if it appears later
+# facenet_pytorch (optional)
 if "facenet_pytorch" not in sys.modules:
     f = types.ModuleType("facenet_pytorch")
     class _M: pass
