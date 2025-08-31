@@ -4,12 +4,20 @@ os.environ["UNIT_TEST"] = "1"   # must be before importing app
 
 if "transformers" not in sys.modules:
     t = types.ModuleType("transformers")
-    class _Dummy: pass
+
+    class _Dummy:
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs):
+            return cls()
+        def __call__(self, *args, **kwargs):
+            # mimic processor/model call returning something harmless
+            return {}
+
     t.CLIPProcessor = _Dummy
     t.CLIPModel = _Dummy
     sys.modules["transformers"] = t
 
-# torch stub with .cuda.is_available() -> False
+# --- stub torch with cuda.is_available() -> False ---
 if "torch" not in sys.modules:
     torch_stub = types.ModuleType("torch")
     class _Cuda:
@@ -18,7 +26,7 @@ if "torch" not in sys.modules:
     torch_stub.cuda = _Cuda()
     sys.modules["torch"] = torch_stub
 
-# facenet_pytorch (optional)
+# (optional) facenet_pytorch stub if app imports it
 if "facenet_pytorch" not in sys.modules:
     f = types.ModuleType("facenet_pytorch")
     class _M: pass
