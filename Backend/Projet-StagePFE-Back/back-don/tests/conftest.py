@@ -7,11 +7,17 @@ if "transformers" not in sys.modules:
 
     class _Dummy:
         @classmethod
-        def from_pretrained(cls, *args, **kwargs):
-            return cls()
-        def __call__(self, *args, **kwargs):
-            # mimic processor/model call returning something harmless
-            return {}
+        def from_pretrained(cls, *a, **k): return cls()
+        def __call__(self, *a, **k): return {}
+        def to(self, *a, **k): return self
+        def eval(self, *a, **k): return self
+        # common names sometimes used:
+        def encode_image(self, *a, **k): return []
+        def get_text_features(self, *a, **k): return []
+        # catch-all so any unexpected attr is a no-op
+        def __getattr__(self, name):
+            def _noop(*a, **k): return self
+            return _noop
 
     t.CLIPProcessor = _Dummy
     t.CLIPModel = _Dummy
