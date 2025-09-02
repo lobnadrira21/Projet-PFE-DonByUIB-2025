@@ -117,42 +117,38 @@ def app(_configure_db_url):
 
 
 # ---------- Gestion transactionnelle ----------
-from sqlalchemy.orm import scoped_session, sessionmaker, Session as SASession
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy import event
 
 @pytest.fixture(scope="function")
 def db_session(app):
     """
-    Transaction + savepoint par test.
-    Chaque test rollback tout → pas de persistance.
+    Transaction + savepoint (savepoint = nested transaction) par test.
+    Tout est rollback après chaque test → base propre.
     """
     engine = db.engine
     connection = engine.connect()
     outer_tx = connection.begin()
 
-    # session liée à cette connexion
+    # scoped_session lié à cette connexion
     SessionLocal = sessionmaker(bind=connection, future=True)
     scoped = scoped_session(SessionLocal)
 
     old_session = db.session
     db.session = scoped
 
-    # begin_nested sur la SESSION (pas la connexion)
-    db.session.begin_nested()
+    # IMPORTANT : on travaille sur l'INSTANCE de session
+    sess = db.session()            # <- récupère la session réelle
+    sess.begin_nested()            # savepoint initial
 
-    # Redémarre un savepoint après chaque fin de transaction imbriquée
-    @pytest.fixture(autouse=True)
-    def _no_op():
-        yield
-
-    @SASession.event.listens_for(SASession, "after_transaction_end")
-    def restart_savepoint(sess, trans):
-        # On ne relance que pour notre session de test
-        if sess is not db.session:
-            return
-        # Si on vient de terminer le nested, on le recrée
+    # Redémarre un savepoint quand le nested se termine
+    @event.listens_for(sess, "after_transaction_end")
+    def restart_savepoint(sess_, trans):
+        # Si c’était le savepoint (nested) qui s’est terminé,
+        # on en recrée un nouveau pour isoler chaque flush dans le test
         if trans.nested and not trans._parent.nested:
             try:
-                sess.begin_nested()
+                sess_.begin_nested()
             except Exception:
                 pass
 
@@ -160,21 +156,27 @@ def db_session(app):
         yield db.session
     finally:
         try:
-            # rollback global
-            if db.session.is_active:
-                db.session.rollback()
+            if sess.is_active:
+                sess.rollback()
         except Exception:
             pass
-        db.session.close()
+        try:
+            sess.close()
+        except Exception:
+            pass
+
+        # Nettoyage du scoped_session et restauration
         scoped.remove()
-        # rollback de la transaction externe & fermeture
+        db.session = old_session
+
+        # Rollback/fermeture de la connexion externe
         try:
             if outer_tx.is_active:
                 outer_tx.rollback()
         except Exception:
             pass
         connection.close()
-        db.session = old_session
+
 
 
 # ---------- Fixtures client ----------
