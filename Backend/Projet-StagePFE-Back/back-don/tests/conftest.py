@@ -1,7 +1,10 @@
 # tests/conftest.py
 import os, sys, types, pytest
-os.environ["UNIT_TEST"] = "1"   # must be before importing app
 
+# Indique qu'on est en mode test
+os.environ["UNIT_TEST"] = "1"
+
+# ---------- Stubs ML (transformers / torch / facenet) ----------
 if "transformers" not in sys.modules:
     t = types.ModuleType("transformers")
 
@@ -11,10 +14,8 @@ if "transformers" not in sys.modules:
         def __call__(self, *a, **k): return {}
         def to(self, *a, **k): return self
         def eval(self, *a, **k): return self
-        # common names sometimes used:
         def encode_image(self, *a, **k): return []
         def get_text_features(self, *a, **k): return []
-        # catch-all so any unexpected attr is a no-op
         def __getattr__(self, name):
             def _noop(*a, **k): return self
             return _noop
@@ -22,7 +23,6 @@ if "transformers" not in sys.modules:
     t.CLIPProcessor = _Dummy
     t.CLIPModel = _Dummy
     sys.modules["transformers"] = t
-
 
 if "torch" not in sys.modules:
     torch_stub = types.ModuleType("torch")
@@ -32,13 +32,12 @@ if "torch" not in sys.modules:
     torch_stub.cuda = _Cuda()
     sys.modules["torch"] = torch_stub
 
-
 if "facenet_pytorch" not in sys.modules:
     f = types.ModuleType("facenet_pytorch")
 
     class MTCNN:
         def __init__(self, *args, **kwargs): pass
-        def __call__(self, *args, **kwargs): return []  # pretend no faces
+        def __call__(self, *args, **kwargs): return []
 
     class InceptionResnetV1:
         def __init__(self, *args, **kwargs): pass
@@ -50,100 +49,121 @@ if "facenet_pytorch" not in sys.modules:
     sys.modules["facenet_pytorch"] = f
 
 
+# ---------- App et modèles ----------
 from app import app as flask_app
 from app import db
 
 try:
     from app import User, Association, Don, Gouvernorat, TypeAssociationEnum
 except Exception:
-    User = Association = Don = Gouvernorat = TypeAssociationEnum = None  
+    User = Association = Don = Gouvernorat = TypeAssociationEnum = None
 
 try:
     from flask_jwt_extended import create_access_token
 except Exception:
     create_access_token = None
 
+
+# ---------- Configuration DB ----------
 @pytest.fixture(scope="session", autouse=True)
 def _configure_db_url():
     """
-    Force l'app à utiliser PostgreSQL pour les tests.
-    Défini via POSTGRES_TEST_URL. Exemple:
-    postgresql+psycopg2://postgres:postgres123@localhost:5432/gestiondonsdb?client_encoding=utf8
+    Configure l'app pour PostgreSQL en test.
+    Nécessite POSTGRES_TEST_URL défini dans l'environnement.
+    Exemple :
+      postgresql+psycopg2://postgres:postgres123@localhost:5432/gestiondonsdb_test
     """
     pg_url = os.getenv("POSTGRES_TEST_URL")
     if not pg_url:
-        pytest.skip("POSTGRES_TEST_URL non défini.")
+        pytest.skip("POSTGRES_TEST_URL non défini (base de test obligatoire).")
+
     flask_app.config.update(
         TESTING=True,
         SQLALCHEMY_DATABASE_URI=pg_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
+    flask_app.config.setdefault("JWT_SECRET_KEY", "test-secret-key")
     return pg_url
+
+
 @pytest.fixture(scope="session")
 def app(_configure_db_url):
     """
-    Crée le schéma une fois pour la session, puis applique un mécanisme
-    de transaction/savepoint par test dans la fixture 'db_session'.
+    Crée le schéma une fois par session.
+    ATTENTION : ne fait pas de drop_all sur une base partagée !
     """
-    ctx = flask_app.app_context(); ctx.push()
-    # Crée toutes les tables
+    ctx = flask_app.app_context()
+    ctx.push()
     db.create_all()
 
-    # Seed minimal (gouvernorat id=1) si nécessaire
+    # Seed minimal
     if Gouvernorat is not None:
         try:
             if Gouvernorat.query.count() == 0:
                 g = Gouvernorat(nomGouvernorat="Tunis")
-                db.session.add(g); db.session.commit()
+                db.session.add(g)
+                db.session.commit()
         except Exception:
             db.session.rollback()
 
     try:
         yield flask_app
     finally:
-        # Nettoyage final du schéma
         db.session.remove()
-        db.drop_all()
+        # SÉCURITÉ : pas de drop_all ici pour éviter d'effacer une base partagée
         ctx.pop()
+
+
+# ---------- Gestion transactionnelle ----------
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy import event
 
 @pytest.fixture(scope="function")
 def db_session(app):
     """
-    Transaction/savepoint par test → aucune persistance après chaque test.
+    Transaction + savepoint par test.
+    Chaque test rollback tout → pas de persistance.
     """
     engine = db.engine
-    conn = engine.connect()
-    trans = conn.begin()  # transaction externe
+    connection = engine.connect()
+    outer_tx = connection.begin()
 
-    # attacher une session dédiée à cette connexion
-    options = dict(bind=conn, binds={})
-    sess = db.create_scoped_session(options=options)
+    # session liée à cette connexion
+    Session = sessionmaker(bind=connection, future=True)
+    scoped = scoped_session(Session)
+
     old_session = db.session
-    db.session = sess
+    db.session = scoped
 
-    nested = conn.begin_nested()  # savepoint
+    nested_tx = connection.begin_nested()
 
-    from sqlalchemy import event
-    @event.listens_for(sess(), "after_transaction_end")
-    def _restart_savepoint(session, transaction):
-        nonlocal nested
-        if not nested.is_active:
-            nested = conn.begin_nested()
+    @event.listens_for(scoped(), "after_transaction_end")
+    def restart_savepoint(sess, trans):
+        nonlocal nested_tx
+        if not nested_tx.is_active:
+            nested_tx = connection.begin_nested()
 
     try:
         yield db.session
     finally:
-        sess.remove()
+        try:
+            if nested_tx.is_active:
+                nested_tx.rollback()
+        finally:
+            if outer_tx.is_active:
+                outer_tx.rollback()
+        scoped.remove()
         db.session = old_session
-        nested.rollback()
-        trans.rollback()
-        conn.close()
+        connection.close()
 
+
+# ---------- Fixtures client ----------
 @pytest.fixture()
 def client(app, db_session):
     return app.test_client()
 
-# ---------- Helpers JWT & users ----------
+
+# ---------- Helpers JWT & utilisateurs ----------
 def _mk_user(email: str, role: str, password: str = "pass"):
     u = User(email=email.strip(), role=role)
     if hasattr(u, "set_password"):
@@ -151,7 +171,7 @@ def _mk_user(email: str, role: str, password: str = "pass"):
     elif hasattr(u, "password_hash"):
         u.password_hash = password
     db.session.add(u)
-    db.session.flush()  # pour avoir u.id
+    db.session.flush()
     return u
 
 def _token_for(user_id: int, role: str, email: str | None = None):
