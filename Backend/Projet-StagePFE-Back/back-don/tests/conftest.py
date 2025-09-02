@@ -1,7 +1,7 @@
-# tests/conftest.py
+
 import os, sys, types, pytest
 
-# Indique qu'on est en mode test
+# En mode test
 os.environ["UNIT_TEST"] = "1"
 
 # ---------- Stubs ML (transformers / torch / facenet) ----------
@@ -52,7 +52,6 @@ if "facenet_pytorch" not in sys.modules:
 # ---------- App et modèles ----------
 from app import app as flask_app
 from app import db
-
 try:
     from app import User, Association, Don, Gouvernorat, TypeAssociationEnum
 except Exception:
@@ -83,6 +82,8 @@ def _configure_db_url():
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
     flask_app.config.setdefault("JWT_SECRET_KEY", "test-secret-key")
+    # Empêche tout envoi réel d'email pendant les tests (si Mail est configuré)
+    flask_app.config["MAIL_SUPPRESS_SEND"] = True
     return pg_url
 
 
@@ -96,11 +97,12 @@ def app(_configure_db_url):
     ctx.push()
     db.create_all()
 
-    # Seed minimal
+    # Seed minimal (gouvernorat id=1 attendu par les tests)
     if Gouvernorat is not None:
         try:
-            if Gouvernorat.query.count() == 0:
-                g = Gouvernorat(nomGouvernorat="Tunis")
+            g = db.session.get(Gouvernorat, 1)
+            if not g:
+                g = Gouvernorat(id=1, nomGouvernorat="Tunis")
                 db.session.add(g)
                 db.session.commit()
         except Exception:
@@ -110,13 +112,12 @@ def app(_configure_db_url):
         yield flask_app
     finally:
         db.session.remove()
-        # SÉCURITÉ : pas de drop_all ici pour éviter d'effacer une base partagée
+        # Pas de drop_all ici (sécurité sur base partagée)
         ctx.pop()
 
 
 # ---------- Gestion transactionnelle ----------
-from sqlalchemy.orm import scoped_session, sessionmaker
-from sqlalchemy import event
+from sqlalchemy.orm import scoped_session, sessionmaker, Session as SASession
 
 @pytest.fixture(scope="function")
 def db_session(app):
@@ -129,32 +130,51 @@ def db_session(app):
     outer_tx = connection.begin()
 
     # session liée à cette connexion
-    Session = sessionmaker(bind=connection, future=True)
-    scoped = scoped_session(Session)
+    SessionLocal = sessionmaker(bind=connection, future=True)
+    scoped = scoped_session(SessionLocal)
 
     old_session = db.session
     db.session = scoped
 
-    nested_tx = connection.begin_nested()
+    # begin_nested sur la SESSION (pas la connexion)
+    db.session.begin_nested()
 
-    @event.listens_for(scoped(), "after_transaction_end")
+    # Redémarre un savepoint après chaque fin de transaction imbriquée
+    @pytest.fixture(autouse=True)
+    def _no_op():
+        yield
+
+    @SASession.event.listens_for(SASession, "after_transaction_end")
     def restart_savepoint(sess, trans):
-        nonlocal nested_tx
-        if not nested_tx.is_active:
-            nested_tx = connection.begin_nested()
+        # On ne relance que pour notre session de test
+        if sess is not db.session:
+            return
+        # Si on vient de terminer le nested, on le recrée
+        if trans.nested and not trans._parent.nested:
+            try:
+                sess.begin_nested()
+            except Exception:
+                pass
 
     try:
         yield db.session
     finally:
         try:
-            if nested_tx.is_active:
-                nested_tx.rollback()
-        finally:
+            # rollback global
+            if db.session.is_active:
+                db.session.rollback()
+        except Exception:
+            pass
+        db.session.close()
+        scoped.remove()
+        # rollback de la transaction externe & fermeture
+        try:
             if outer_tx.is_active:
                 outer_tx.rollback()
-        scoped.remove()
-        db.session = old_session
+        except Exception:
+            pass
         connection.close()
+        db.session = old_session
 
 
 # ---------- Fixtures client ----------
@@ -165,7 +185,7 @@ def client(app, db_session):
 
 # ---------- Helpers JWT & utilisateurs ----------
 def _mk_user(email: str, role: str, password: str = "pass"):
-    u = User(email=email.strip(), role=role)
+    u = User(email=email.strip(), role=role, is_verified=True)  # utile si certaines routes vérifient
     if hasattr(u, "set_password"):
         u.set_password(password)
     elif hasattr(u, "password_hash"):
@@ -180,7 +200,8 @@ def _token_for(user_id: int, role: str, email: str | None = None):
     claims = {"role": role}
     if email:
         claims["email"] = email
-    return create_access_token(identity=user_id, additional_claims=claims)
+    # IMPORTANT: identity doit être une chaîne
+    return create_access_token(identity=str(user_id), additional_claims=claims)
 
 @pytest.fixture()
 def admin_token(db_session):
