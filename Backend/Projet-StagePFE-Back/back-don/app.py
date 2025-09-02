@@ -737,22 +737,28 @@ def modify_compte_association(id):
             return jsonify({"error": "Access denied!"}), 403
 
         data = request.form
-        association = Association.query.get(id)
-        user = User.query.filter_by(email=association.email).first()
 
-        if not association or not user:
+        # ✅ D'abord vérifier que l'association existe
+        association = Association.query.get(id)
+        if not association:
             return jsonify({"error": "Association not found!"}), 404
 
-        # Mise à jour des champs...
+        # ✅ Puis récupérer l'user correspondant, et vérifier
+        user = User.query.filter_by(email=association.email).first()
+        if not user:
+            return jsonify({"error": "User not found for this association!"}), 404
+
+        # --- mises à jour ---
         if "nom_complet" in data:
             association.nom_complet = data["nom_complet"].strip()
 
         if "email" in data:
-            existing_user = User.query.filter(User.email == data["email"], User.id != user.id).first()
+            new_email = data["email"].strip()
+            existing_user = User.query.filter(User.email == new_email, User.id != user.id).first()
             if existing_user:
                 return jsonify({"error": "Email already exists!"}), 409
-            association.email = data["email"].strip()
-            user.email = data["email"].strip()
+            association.email = new_email
+            user.email = new_email
 
         if "description_association" in data:
             association.description_association = data["description_association"].strip()
@@ -768,7 +774,7 @@ def modify_compte_association(id):
                 valid_types = [t.value for t in TypeAssociationEnum]
                 return jsonify({
                     "error": f"Type d'association invalide. Valeurs valides : {valid_types}"
-        }), 400
+                }), 400
 
         db.session.commit()
         return jsonify({"message": "Association updated successfully!"}), 200
@@ -776,6 +782,7 @@ def modify_compte_association(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 # supprimer association par l'admin
 @app.route("/delete-compte-association/<int:id_association>", methods=["DELETE"])
@@ -1163,23 +1170,26 @@ def delete_don(id_don):
     try:
         claims = get_jwt()
         if claims.get("role") != "association":
-            return jsonify({"error": "Accès refusé : seules les associations peuvent supprimer un don."}), 403
+            return jsonify({"error": "Access denied! Only associations can delete their donations."}), 403
 
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        association = Association.query.filter_by(email=user.email).first()
+        # ✅ Assoc liée au user connecté
+        assoc = Association.query.filter_by(email=claims.get("email")).first()
+        if not assoc:
+            return jsonify({"error": "Association introuvable pour cet utilisateur."}), 404
 
-        don = Don.query.filter_by(id_don=id_don, id_association=association.id_association).first()
+        # ✅ Chercher le don appartenant à cette association
+        don = Don.query.filter_by(id_don=id_don, id_association=assoc.id_association).first()
         if not don:
-            return jsonify({"error": "Don introuvable ou accès non autorisé."}), 404
+            return jsonify({"error": "Don not found."}), 404
 
         db.session.delete(don)
         db.session.commit()
-        return jsonify({"message": "🗑️ Don supprimé avec succès."}), 200
+        return jsonify({"message": "Don deleted successfully!"}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 # valider don
 @app.route("/don/<int:id_don>/valider", methods=["PUT"])
