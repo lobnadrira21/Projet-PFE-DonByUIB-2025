@@ -73,10 +73,10 @@
               "optimization": {
                 "scripts": true,
                 "styles": {
-                  "minify": false,
+                  "minify": true,
                   "inlineCritical": true
                 },
-                "fonts": true
+                "fonts": false
               },
               "outputHashing": "all"
             }
