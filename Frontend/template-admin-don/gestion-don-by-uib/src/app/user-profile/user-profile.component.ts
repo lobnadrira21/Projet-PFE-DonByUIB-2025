@@ -29,7 +29,7 @@ MatDividerModule
 })
 export class UserProfileComponent implements OnInit {
 typesAssociation: string[] = Object.values(TypeAssociation);
-
+ private initialValue!: any;
 
   profileForm!: FormGroup;
   message: string = '';
@@ -45,13 +45,13 @@ showNew = false;
     // Initialize form
     this.typesAssociation = Object.values(TypeAssociation);
     this.profileForm = this.fb.group({
-  nom_complet: ['', Validators.required],
-  email: ['', [Validators.required, Validators.email]],
+  nom_complet: [''],
+  email: ['', [Validators.email]], 
   description_association: [''],
-  telephone: ['', Validators.required],
-  adresse: ['', Validators.required],
-  type_association: ['', Validators.required],
-  gouvernorat_id: [null],  // ✅ Ajouté ici
+  telephone: [''],
+  adresse: [''],
+  type_association: [''],
+  gouvernorat_id: [null],  
   old_password: [''],
   new_password: [''],
   photo: [''],
@@ -98,73 +98,68 @@ onCinFiscaleSelected(event: any): void {
   });
 }
   updateProfile() {
-    if (this.profileForm.invalid) return;
+    if (this.profileForm.pristine) return; // rien à envoyer
 
     const formData = new FormData();
-  
-    // Ajouter les champs du formulaire dans FormData
-    Object.keys(this.profileForm.controls).forEach(key => {
-      const value = this.profileForm.get(key)?.value;
-      formData.append(key, value);
-    });
-  
-    // Ajouter la photo si elle est sélectionnée
-    if (this.selectedFile) {
-      formData.append('photo_file', this.selectedFile); // 🔁 nom attendu par Flask
-    }
-    // Ajouter la photo si sélectionnée
-if (this.selectedFile) {
-  formData.append('photo_file', this.selectedFile);
-}
 
-// Ajouter la CIN fiscale si sélectionnée
-if (this.selectedCinFile) {
-  formData.append('cin_fiscale_file', this.selectedCinFile);
-}
+    // 🔁 Ajoute seulement les champs réellement modifiés et non vides
+    Object.keys(this.profileForm.controls).forEach((key) => {
+      const control = this.profileForm.get(key);
+      if (!control) return;
 
-  
-    const token = this.authService.getToken();
-    if (!token) {
-      console.error("No token found. User is not authenticated.");
-      return;
-    }
-    const gouvernoratId = this.profileForm.get('gouvernorat_id')?.value;
-if (gouvernoratId) {
-  formData.append('gouvernorat_id', gouvernoratId.toString());
-}
+      // champ modifié ?
+      const changed = control.dirty && control.value !== this.initialValue?.[key];
 
+      // on ignore les vides (''/null/undefined) pour éviter d’écraser côté backend
+      const hasValue =
+        control.value !== '' &&
+        control.value !== null &&
+        control.value !== undefined;
 
-  
-    this.authService.modifyProfile(formData).subscribe(
-      (response) => {
-        console.log("Profile updated successfully:", response);
-        this.message = "Profil mis à jour avec succès !";
-        setTimeout(() => {
-          this.router.navigate(['/dashboard-association/accueil-association']);
-        }, 1000);
-      },
-
-      (error) => {
-        console.error("Error updating profile:", error);
-        this.message = error.error?.error || "Erreur lors de la mise à jour du profil.";
+      if (changed && hasValue) {
+        // gouvernorat_id: number → string
+        const val = key === 'gouvernorat_id' ? String(control.value) : control.value;
+        formData.append(key, val);
       }
-    );
-    
+    });
+
+    // 📎 Fichiers (toujours si sélectionnés)
+    if (this.selectedFile) formData.append('photo_file', this.selectedFile);
+    if (this.selectedCinFile) formData.append('cin_fiscale_file', this.selectedCinFile);
+
+    // 🗝️ Token (si besoin côté service)
+    const token = this.authService.getToken();
+    if (!token) return console.error("No token found.");
+
+    this.authService.modifyProfile(formData).subscribe({
+      next: (res) => {
+        this.message = "Profil mis à jour avec succès !";
+        // ✅ Après succès, on remet la base des valeurs
+        this.initialValue = this.profileForm.getRawValue();
+        this.profileForm.markAsPristine();
+        setTimeout(() => this.router.navigate(['/dashboard-association/accueil-association']), 800);
+      },
+      error: (err) => {
+        console.error("Error updating profile:", err);
+        this.message = err.error?.error || "Erreur lors de la mise à jour du profil.";
+      }
+    });
   }
   
   /** Handle form submission */
   loadProfile() {
-  this.authService.getProfile().subscribe(
-    (data) => {
-      this.profileForm.patchValue(data);
-      
-    },
-    (error) => {
-      console.error("Error fetching profile:", error);
-    }
-  );
-}
-resetForm() {
-  this.profileForm.reset(this.profileForm.getRawValue());
-}
+    this.authService.getProfile().subscribe(
+      (data) => {
+        this.profileForm.patchValue(data);
+        // 🧷 Garde une copie pour détecter les changements
+        this.initialValue = this.profileForm.getRawValue();
+        this.profileForm.markAsPristine();
+      },
+      (error) => console.error("Error fetching profile:", error)
+    );
+  }
+ resetForm() {
+    this.profileForm.reset(this.initialValue); // ↩️ revenir aux valeurs chargées
+    this.profileForm.markAsPristine();
+  }
 }

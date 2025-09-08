@@ -483,7 +483,6 @@ def refresh():
     )
     return jsonify({"access_token": new_access}), 200
 
-
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
@@ -494,12 +493,16 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not user.check_password(password):
         return jsonify({"error": "Identifiants invalides"}), 401
-    if not user.is_verified:
-    # Option: renvoyer un indicateur côté front pour afficher l’écran OTP
-         return jsonify({
-        "error": "Votre compte n'est pas encore vérifié.",
-        "need_verification": True
-    }), 403
+
+    # ✅ OTP uniquement pour les donateurs
+    if user.role == "donator" and not user.is_verified:
+        # Ici tu déclenches l’envoi du code OTP par email ou SMS
+        # par exemple: send_otp(user.email)
+        return jsonify({
+            "error": "Vérification OTP requise.",
+            "need_verification": True,
+            "role": user.role
+        }), 403
 
     # 🧠 Récupération du nom selon le rôle
     username = None
@@ -510,16 +513,13 @@ def login():
     else:
         username = user.nom_complet
 
-    
+    # 🎫 Génération des tokens JWT
     additional_claims = {"email": user.email, "role": user.role}
     access_token  = create_access_token(identity=str(user.id), additional_claims=additional_claims)
     refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
 
-
-
-    # 🔧 Pour debug (facultatif)
     print("✅ Connexion réussie pour :", user.email)
-    print("🔐 JWT généré avec role :", user.role)
+    print("🔐 JWT généré avec rôle :", user.role)
 
     # ✅ Réponse finale
     return jsonify({
