@@ -1880,8 +1880,10 @@ def add_comment(publication_id):
             return jsonify({"error": "Le contenu du commentaire est requis."}), 400
 
         # Analyse sentiment avec VADER
-        scores = analyze_comment(contenu_commentaire)
-        sentiment_label = get_sentiment_label(scores["compound"], contenu_commentaire)
+        # Analyse sentiment
+        scores = analyze_comment_fr(contenu_commentaire)
+        sentiment_label = scores["label"]
+
 
 
         new_comment = Commentaire(
@@ -2077,29 +2079,98 @@ def like_publication(publication_id):
 
 # analyser sentiment d'un donateur
 
+import re
+from functools import lru_cache
+from typing import Dict, Any
+
 from deep_translator import GoogleTranslator
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-def analyze_comment(comment_text):
-    # Traduire le texte en anglais
-    translated = GoogleTranslator(source='auto', target='en').translate(comment_text)
-    analyzer = SentimentIntensityAnalyzer()
-    scores = analyzer.polarity_scores(translated)
-    return scores
+# ---- 1) Instances globales pour éviter les réallocations
+ANALYZER = SentimentIntensityAnalyzer()
 
+# ---- 2) Lexiques FR (mots entiers, avec variations accentuées)
+POS_FR_PATTERNS = [
+    r"\bbravo\b",
+    r"\bmerci\b",
+    r"\bparfait\b",
+    r"\bg[ée]nial[e]?\b",
+    r"\bf[ée]licitations?\b",
+    r"\bsuper\b",
+    r"\bexcellent[e]?\b",
+    r"\btop\b",
+    r"\bformidable\b",
+    r"\bmeilleur[e]?\b",
+    r"\bbonne?\b",
+    r"\bbon courage\b",
+    r"\baider?\b",
+]
+NEG_FR_PATTERNS = [
+    r"\bpas\s+\w+",         # exp: "pas bien", "pas génial"
+    r"\bd[ée]çu[e]?\b",
+    r"\bmauvais[e]?\b",
+    r"\bd[ée]sastreux(se)?\b",
+    r"\bcatastrophique\b",
+    r"\bannul[ée]?\b",
+    r"\bretard[s]?\b",
+    r"\bprobl[èe]me[s]?\b",
+    r"\bhorrible\b",
+    r"\bd[ée]sagr[ée]able\b",
+]
 
-def get_sentiment_label(compound_score, comment):
-    comment = comment.lower()
-    mots_positifs = ['bravo', 'merci', 'parfait', 'génial', 'félicitations', 'don', 'aider','bonne','bon courage','meilleur']
+POS_RE = [re.compile(p, flags=re.IGNORECASE) for p in POS_FR_PATTERNS]
+NEG_RE = [re.compile(p, flags=re.IGNORECASE) for p in NEG_FR_PATTERNS]
 
-    if any(mot in comment for mot in mots_positifs):
+# ---- 3) Traduction avec cache (accélère et limite les appels API)
+@lru_cache(maxsize=2048)
+def _translate_to_en(text: str) -> str:
+    # deep_translator détecte automatiquement la langue source
+    return GoogleTranslator(source="auto", target="en").translate(text)
+
+def _label_from_vader_compound(c: float) -> str:
+    # Seuils classiques de VADER
+    if c >= 0.05:
         return "positif"
-    elif compound_score >= 0.05:
-        return "positif"
-    elif compound_score <= -0.05:
+    if c <= -0.05:
         return "négatif"
+    return "neutre"
+
+def analyze_comment_fr(comment_text: str) -> Dict[str, Any]:
+    
+    original = (comment_text or "").strip()
+
+    # 1) Traduction (avec fallback si l'appel échoue)
+    try:
+        translated = _translate_to_en(original) if original else ""
+    except Exception:
+        translated = original  # fallback : mieux vaut analyser le texte brut que planter
+
+    # 2) Scores VADER sur la version anglaise (ou fallback)
+    scores = ANALYZER.polarity_scores(translated)
+
+    # 3) Règles FR (prioritaires si signaux forts)
+    #    - D'abord signaux négatifs (ex: "pas bon", "déçu") pour éviter faux positifs
+    if original:
+        if any(r.search(original) for r in NEG_RE):
+            label = "négatif"
+        elif any(r.search(original) for r in POS_RE):
+            label = "positif"
+        else:
+            label = _label_from_vader_compound(scores["compound"])
     else:
-        return "neutre"
+        label = "neutre"
+
+    return {
+        **scores,
+        "translated": translated,
+        "label": label,
+    }
+
+# ---- 4) Option: simple étiquette directement
+def get_sentiment_label_fr(comment_text: str) -> str:
+    res = analyze_comment_fr(comment_text)
+    return res["label"]
+
 
 
 # get paiements (donateur)
