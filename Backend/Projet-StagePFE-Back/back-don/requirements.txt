@@ -22,3 +22,4 @@ regex>=2024.9.11; python_version >= "3.13"
 
 xhtml2pdf==0.2.15
 pdf2image==1.17.0
+deep-translator>=1.11.0
