@@ -16,10 +16,10 @@ from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
 import requests
 import ast
-
+from metrics import metrics_bp
 app = Flask(__name__)
 
-
+app.register_blueprint(metrics_bp)
 
 CORS(app, resources={r"/*": {
     "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
@@ -2714,4 +2714,4 @@ def add_admin():
 # ------------------- DATABASE MIGRATION -------------------
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000) 
