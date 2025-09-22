@@ -1,13 +1,14 @@
+# ---- Base ----
 FROM python:3.11-slim
 
-# Environment settings
+# Environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install build essentials + common libs
+# System deps 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -18,12 +19,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+ && pip install --no-cache-dir -r requirements.txt \
+ # to ensure Prometheus metrics are available
+ && pip install --no-cache-dir prometheus-client
 
-# Copy app
+# App code
 COPY . .
 
+# to keep ML disabled by default to prevent crashes on missing transformers/torch
+ENV USE_ML=0
+
+# The app listens on 8089 
 EXPOSE 8089
+
+
 CMD ["python", "app.py"]
