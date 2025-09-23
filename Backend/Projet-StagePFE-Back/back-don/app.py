@@ -1,6 +1,6 @@
 import os
 IS_UNIT = os.getenv("UNIT_TEST") == "1"
-
+USE_ML = os.getenv("USE_ML","0") == "1"
 from flask import Flask, jsonify, request, url_for, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -2462,13 +2462,22 @@ def get_admin_stats():
 import json
 import uuid
 
-# (existing)
-from flask import Flask, request, jsonify
-from transformers import CLIPProcessor, CLIPModel
-import torch
-from PIL import Image
-import numpy as np
-from facenet_pytorch import MTCNN, InceptionResnetV1
+
+if USE_ML:
+    try:
+        from transformers import CLIPProcessor, CLIPModel
+        import torch
+        from PIL import Image
+        import numpy as np
+        from facenet_pytorch import MTCNN, InceptionResnetV1
+    except ImportError as e:
+        raise RuntimeError("USE_ML=1 but ML packages are missing") from e
+else:
+    CLIPProcessor = None
+    CLIPModel = None
+    torch = None
+    MTCNN = None
+    InceptionResnetV1 = None
 
 
 # === Configuration & model setup (as before) ===
