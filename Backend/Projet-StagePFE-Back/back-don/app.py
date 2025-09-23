@@ -20,7 +20,7 @@ from metrics import metrics_bp
 app = Flask(__name__)
 app.register_blueprint(metrics_bp)
 
-app.register_blueprint(metrics_bp)
+
 
 CORS(app, resources={r"/*": {
     "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
