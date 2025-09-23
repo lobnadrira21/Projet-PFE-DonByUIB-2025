@@ -1,6 +1,5 @@
 import os
 IS_UNIT = os.getenv("UNIT_TEST") == "1"
-USE_ML = os.getenv("USE_ML", "0") == "1"
 
 from flask import Flask, jsonify, request, url_for, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
@@ -19,9 +18,8 @@ import requests
 import ast
 from metrics import metrics_bp
 app = Flask(__name__)
+
 app.register_blueprint(metrics_bp)
-
-
 
 CORS(app, resources={r"/*": {
     "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
@@ -484,7 +482,7 @@ def refresh():
         additional_claims={"email": claims.get("email"), "role": claims.get("role")}
     )
     return jsonify({"access_token": new_access}), 200
-from metrics import USER_LOGIN_TOTAL
+
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
@@ -522,7 +520,7 @@ def login():
 
     print("✅ Connexion réussie pour :", user.email)
     print("🔐 JWT généré avec rôle :", user.role)
-    USER_LOGIN_TOTAL.labels(role=user.role).inc()
+
     # ✅ Réponse finale
     return jsonify({
         "access_token": access_token,
@@ -606,7 +604,7 @@ def request_password_reset():
     mail.send(msg)
     return jsonify({"message": "Un lien de réinitialisation a été envoyé à votre email."}), 200
 
-from metrics import ASSOCIATION_CREATED
+
 @app.route("/create-association", methods=["POST"])
 @jwt_required()
 def create_association():
@@ -682,7 +680,7 @@ def create_association():
         )
         db.session.add(new_association)
         db.session.commit()
-        ASSOCIATION_CREATED.inc()
+
         return jsonify({"message": "✅ Association created successfully", "user_id": new_user.id}), 201
 
     except Exception as e:
@@ -1038,7 +1036,6 @@ def get_profile_association():
         return jsonify({"error": str(e)}), 500
 
 # ajouter don
-from metrics import DON_CREATED_TOTAL
 @app.route("/create-don", methods=["POST"])
 @jwt_required()
 def create_don():
@@ -1100,7 +1097,6 @@ def create_don():
 
         db.session.add(new_don)
         db.session.commit()
-        DON_CREATED_TOTAL.inc()
 
         return jsonify({"message": "✅ Don créé avec succès !"}), 201
 
@@ -1196,7 +1192,6 @@ def delete_don(id_don):
 
 
 # valider don
-from metrics import DON_VALIDATED_TOTAL
 @app.route("/don/<int:id_don>/valider", methods=["PUT"])
 @jwt_required()
 def valider_don(id_don):
@@ -1236,7 +1231,6 @@ def valider_don(id_don):
   
 
     db.session.commit()
-    DON_VALIDATED_TOTAL.inc()
     return jsonify({"message": "Don validé avec succès"}), 200
 # supprimer les notifications qui dépassent 24h
 @app.route('/notifications/cleanup', methods=['DELETE'])
@@ -1256,7 +1250,7 @@ def supprimer_anciennes_notifications():
 
 
 # Refuser don
-from metrics import DON_REFUSED_TOTAL
+
 @app.route("/don/<int:id_don>/refuser", methods=["PUT"])
 @jwt_required()
 def refuser_don(id_don):
@@ -1293,7 +1287,6 @@ def refuser_don(id_don):
         print("Erreur lors de l’envoi de l’email :", e)
 
     db.session.commit()
-    DON_REFUSED_TOTAL.inc()
     return jsonify({"message": "Don refusé avec succès"}), 200
 
 
@@ -2469,23 +2462,13 @@ def get_admin_stats():
 import json
 import uuid
 
-
-if USE_ML:
-    try:
-        from transformers import CLIPProcessor, CLIPModel
-        import torch
-        from PIL import Image
-        import numpy as np
-        from facenet_pytorch import MTCNN, InceptionResnetV1
-    except ImportError as e:
-        raise RuntimeError("USE_ML=1 but ML packages are missing") from e
-else:
-    CLIPProcessor = None
-    CLIPModel = None
-    torch = None
-    MTCNN = None
-    InceptionResnetV1 = None
-
+# (existing)
+from flask import Flask, request, jsonify
+from transformers import CLIPProcessor, CLIPModel
+import torch
+from PIL import Image
+import numpy as np
+from facenet_pytorch import MTCNN, InceptionResnetV1
 
 
 # === Configuration & model setup (as before) ===
@@ -2508,30 +2491,15 @@ FACE_MATCH_THRESHOLD = 0.65
 
 # In-memory store mapping session_id -> embedding (np.float32, L2-normalized)
 SESSIONS = {}
-if USE_ML:
-    try:
-        from transformers import CLIPProcessor, CLIPModel
-        import torch
-        from PIL import Image
-        import numpy as np
-        from facenet_pytorch import MTCNN, InceptionResnetV1
-    except ImportError as e:
-        # Fail fast with a clear message if ML is requested but deps are missing
-        raise RuntimeError("USE_ML=1 but required ML packages are not installed") from e
 
-    device    = "cuda" if torch.cuda.is_available() else "cpu"
-    processor = CLIPProcessor.from_pretrained(MODEL_NAME)
-    model     = CLIPModel.from_pretrained(MODEL_NAME).to(device)
+device    = "cuda" if torch.cuda.is_available() else "cpu"
+processor = CLIPProcessor.from_pretrained(MODEL_NAME)
+model     = CLIPModel.from_pretrained(MODEL_NAME).to(device)
 
 # NEW: face models (MTCNN for detection+alignment, IR-ResNet for embeddings)
-    mtcnn = MTCNN(keep_all=True, device=device, thresholds=[0.6, 0.7, 0.7])  # tweak if CIN faces are small
-    face_encoder = InceptionResnetV1(pretrained="vggface2").eval().to(device)
-else:
-    # Safe fallbacks so any accidental access won’t crash
-    
-    device = "cpu"
-    
-from PIL import Image
+mtcnn = MTCNN(keep_all=True, device=device, thresholds=[0.6, 0.7, 0.7])  # tweak if CIN faces are small
+face_encoder = InceptionResnetV1(pretrained="vggface2").eval().to(device)
+
 def _get_face_embedding(pil_img: Image.Image):
     """
     Returns (embedding_list, metadata) or (None, reason)
@@ -2574,8 +2542,6 @@ def _get_face_embedding(pil_img: Image.Image):
 
 @app.route("/verify-cin", methods=["POST"])
 def verify_cin():
-    if not USE_ML:
-        return jsonify({"ok": False, "error": "ML disabled on this deployment"}), 503
     # 1. Validate upload under 'cin'
     if "cin" not in request.files:
         return jsonify(False), 400
@@ -2654,8 +2620,6 @@ def verify_cin():
 @app.route("/verifyface", methods=["POST"])
 @app.route("/verify-face", methods=["POST"])  # alias
 def verify_face():
-    if not USE_ML:
-        return jsonify({"ok": False, "error": "ML disabled on this deployment"}), 503
     """
     Form-data:
       - selfie: file (required)
@@ -2750,4 +2714,4 @@ def add_admin():
 # ------------------- DATABASE MIGRATION -------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000) 
+    app.run(host="0.0.0.0", port=5000)   
