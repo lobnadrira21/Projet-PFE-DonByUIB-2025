@@ -157,19 +157,70 @@
         <button><mat-icon>comment</mat-icon> Commenter</button>
       </div>
 
-      <div class="comments-section">
-        <div *ngFor="let com of selectedPublication.commentaires" class="comment">
-          <strong>{{ com.nom }}</strong> : {{ com.contenu }}
+  <div class="comments-section" *ngIf="selectedPublication">
+
+  <!-- RÉCURSIF -->
+  <ng-template #commentNode let-list>
+    <div *ngFor="let c of list" class="comment">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>{{ c.auteur }}</strong>
+          <small class="text-muted"> • {{ c.date_commentaire | date }}</small>
+          <span *ngIf="c.sentiment" class="badge bg-light text-dark" style="margin-left:6px;">
+            {{ c.sentiment }}
+          </span>
         </div>
 
-        <div class="comment-input">
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Ajouter un commentaire</mat-label>
-            <input matInput [(ngModel)]="newComment" />
-          </mat-form-field>
-          <button mat-flat-button color="primary" (click)="addComment()">Envoyer</button>
+        <!-- Actions pour le propriétaire (donateur) -->
+        <div *ngIf="role === 'donator' && c.is_owner" class="btn-group" style="gap:6px;">
+          <button class="btn btn-sm btn-outline-secondary" (click)="startEditComment(c)">
+            Modifier
+          </button>
+          <button class="btn btn-sm btn-outline-danger" (click)="deleteComment(c, list)">
+            Supprimer
+          </button>
         </div>
       </div>
+
+      <!-- Contenu ou éditeur -->
+      <div *ngIf="editingCommentId !== c.id_commentaire; else editBlock" style="margin-top:6px;">
+        {{ c.contenu }}
+      </div>
+
+      <ng-template #editBlock>
+        <div class="d-flex" style="gap:8px; margin-top:6px;">
+          <input
+            class="form-control"
+            [(ngModel)]="editBuffer"
+            (keyup.enter)="saveEditComment(c)"
+          />
+          <button class="btn btn-primary btn-sm" (click)="saveEditComment(c)">Sauver</button>
+          <button class="btn btn-light btn-sm" (click)="cancelEditComment()">Annuler</button>
+        </div>
+      </ng-template>
+
+      <!-- Enfants -->
+      <div *ngIf="c.replies?.length" style="margin-left:18px; margin-top:10px;">
+        <ng-container *ngTemplateOutlet="commentNode; context: {$implicit: c.replies}"></ng-container>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- Racine -->
+  <ng-container *ngTemplateOutlet="commentNode; context: {$implicit: selectedPublication?.commentaires || []}"></ng-container>
+
+  <!-- Ajout d’un commentaire racine (donateur) -->
+  <div class="comment-input" *ngIf="role === 'donator'">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Ajouter un commentaire</mat-label>
+      <input matInput [(ngModel)]="newComment" (keyup.enter)="addComment()" />
+    </mat-form-field>
+    <button mat-flat-button color="primary" (click)="addComment()">Envoyer</button>
+  </div>
+</div>
+
+
+
     </div>
   </div>
 </section>

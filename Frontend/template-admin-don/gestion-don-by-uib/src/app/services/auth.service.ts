@@ -256,7 +256,7 @@ deletePublication(id: number): Observable<any> {
 }
 
 addComment(publicationId: number, contenu: string) {
-  const token = this.getToken(); // Assure-toi que cette méthode existe
+  const token = this.getToken(); 
   const headers = new HttpHeaders({
     Authorization: `Bearer ${token}`
   });
@@ -265,6 +265,39 @@ addComment(publicationId: number, contenu: string) {
 
   return this.http.post(`${this.apiUrl}/add-comment/${publicationId}`, body, { headers });
 }
+getUserId(): number | null {
+  const token = this.getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const idStr = payload?.sub ?? payload?.identity ?? null; // flask-jwt-extended met souvent "sub"
+    return idStr != null ? Number(idStr) : null;
+  } catch {
+    return null;
+  }
+}
+
+updateComment(commentId: number, contenu: string) {
+  const headers = new HttpHeaders({ Authorization: `Bearer ${this.getToken()}` });
+  return this.http.put(`${this.apiUrl}/update-comment/${commentId}`, { contenu }, { headers });
+}
+
+deleteComment(commentId: number) {
+  const headers = new HttpHeaders({ Authorization: `Bearer ${this.getToken()}` });
+  return this.http.delete(`${this.apiUrl}/delete-comment/${commentId}`, { headers });
+}
+
+
+replyComment(parentCommentId: number, contenu: string) {
+  const token = this.getToken();
+  const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+  return this.http.post(
+    `${this.apiUrl}/reply-comment/${parentCommentId}`,
+    { contenu },
+    { headers }
+  );
+}
+
 
 getNotifications(): Observable<any[]> {
   const token = this.getToken();

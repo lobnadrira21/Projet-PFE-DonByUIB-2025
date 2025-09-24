@@ -229,7 +229,18 @@ class Commentaire(db.Model):
     contenu = db.Column(db.Text, nullable=False)
     date_commentaire = db.Column(db.Date, nullable=False)
     sentiment = db.Column(db.String(20), nullable=True)  # "positif", "neutre", "négatif"
-
+    parent_comment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("commentaires.id_commentaire", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+    replies = db.relationship(
+        "Commentaire",
+        backref=db.backref("parent", remote_side=[id_commentaire]),
+        cascade="all, delete-orphan",
+        lazy=True
+    )
 
     # clé etrangére avec CASCADE (si une publication a été supprimée, ses commentaires seront supprimées)
     id_publication = db.Column(
@@ -1710,6 +1721,7 @@ def create_publication():
 
 
 # list publication
+from sqlalchemy.orm import joinedload
 
 @app.route("/publications", methods=["GET"])
 @jwt_required()
@@ -1718,42 +1730,58 @@ def get_publications():
         claims = get_jwt()
         role = claims.get("role")
 
-        if role == "association":
-            current_user_id = get_jwt_identity()
-            user = User.query.get(current_user_id)
+        # Id utilisateur (utile pour marquer is_owner dans la sérialisation)
+        try:
+            current_user_id = int(get_jwt_identity())
+        except Exception:
+            current_user_id = None
 
-            association = Association.query.filter_by(email=user.email).first()
+        base_query = (
+            Publication.query
+            .options(
+                joinedload(Publication.commentaires).joinedload(Commentaire.replies),
+                joinedload(Publication.association)
+            )
+            .order_by(Publication.date_publication.desc())
+        )
+
+        if role == "association":
+            user = User.query.get(current_user_id)
+            association = Association.query.filter_by(email=user.email).first() if user else None
             if not association:
                 return jsonify({"error": "Aucune association trouvée."}), 404
 
-            publications = Publication.query.filter_by(id_association=association.id_association).all()
+            publications = base_query.filter_by(id_association=association.id_association).all()
 
-        elif role in ["donator", "admin"]:
-            publications = Publication.query.all()
+        elif role == "donator":
+            # Donateur : uniquement publications validées
+            publications = base_query.filter_by(statut="valide").all()
+
+        elif role == "admin":
+            publications = base_query.all()
+
         else:
             return jsonify({"error": "Access denied!"}), 403
 
         result = []
         for pub in publications:
-            commentaires = [
-                {
-                    "nom": User.query.get(com.id_user).nom_complet if com.id_user else "Utilisateur",
-                    "contenu": com.contenu,
-                    "sentiment": com.sentiment
-                }
-                for com in pub.commentaires 
-            ]
+            # Racines = commentaires sans parent
+            root_comments = [c for c in pub.commentaires if c.parent_comment_id is None]
+            root_comments.sort(key=lambda x: x.id_commentaire)
+
+            commentaires_tree = [serialize_comment_tree(c, current_user_id) for c in root_comments]
 
             result.append({
                 "id_publication": pub.id_publication,
                 "titre": pub.titre,
                 "contenu": pub.contenu,
-                "date_publication": pub.date_publication.isoformat(),
+                "date_publication": (pub.date_publication.isoformat() if pub.date_publication else None),
                 "nb_likes": pub.nb_likes,
-                "nb_commentaires": pub.nb_commentaires,
+                "nb_commentaires": pub.nb_commentaires,  # total (incluant réponses si vous incrémentez partout)
                 "nb_partages": pub.nb_partages,
-                "nom_association": pub.association.nom_complet,
-                "commentaires": commentaires  
+                "statut": pub.statut,
+                "nom_association": pub.association.nom_complet if pub.association else None,
+                "commentaires": commentaires_tree
             })
 
         return jsonify(result), 200
@@ -1762,49 +1790,156 @@ def get_publications():
         return jsonify({"error": str(e)}), 500
 
 
-
 # voir détails publication 
+from sqlalchemy.orm import joinedload
 
-@app.route("/publication/<int:id>", methods=["GET"])
+@app.route("/publication/<int:pub_id>", methods=["GET"])
 @jwt_required()
-def get_publication_detail(id):
+def get_publication_detail(pub_id):
     try:
         claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied!"}), 403
+        role = claims.get("role")
 
-        publication = Publication.query.get(id)
-
+        # Précharger commentaires (+ leurs replies) et l'association
+        publication = (
+            Publication.query
+            .options(
+                joinedload(Publication.commentaires).joinedload(Commentaire.replies),
+                joinedload(Publication.association)
+            )
+            .filter(Publication.id_publication == pub_id)
+            .first()
+        )
         if not publication:
             return jsonify({"error": "Publication non trouvée."}), 404
 
-        commentaires_list = [
-            {
-                "id_commentaire": c.id_commentaire,
-                "contenu": c.contenu,
-                "date_commentaire": c.date_commentaire.isoformat(),
-                "sentiment":c.sentiment,
-                "nom_donateur": User.query.get(c.id_user).nom_complet if c.id_user else "Utilisateur"
-                
-            } for c in publication.commentaires
-        ]
+        # Contrôle d'accès selon rôle
+        if role == "association":
+            assoc = Association.query.filter_by(email=claims.get("email")).first()
+            if not assoc or publication.id_association != assoc.id_association:
+                return jsonify({"error": "Access denied!"}), 403
+
+        elif role == "donator":
+            if publication.statut != "valide":
+                return jsonify({"error": "Access denied!"}), 403
+
+        elif role == "admin":
+            pass
+        else:
+            return jsonify({"error": "Access denied!"}), 403
+
+        # Id utilisateur courant pour marquer les commentaires "is_owner"
+        try:
+            current_user_id = int(get_jwt_identity())
+        except Exception:
+            current_user_id = None
+
+        # Arbre des commentaires (racines triées)
+        root_comments = [c for c in publication.commentaires if c.parent_comment_id is None]
+        root_comments.sort(key=lambda x: x.id_commentaire)
+        commentaires_tree = [serialize_comment_tree(c, current_user_id) for c in root_comments]
 
         result = {
             "id_publication": publication.id_publication,
             "titre": publication.titre,
             "contenu": publication.contenu,
-            "date_publication": publication.date_publication.isoformat(),
+            "date_publication": (publication.date_publication.isoformat() if publication.date_publication else None),
             "nb_likes": publication.nb_likes,
-            "nb_commentaires": publication.nb_commentaires,
+            "nb_commentaires": publication.nb_commentaires,  # total
             "nb_partages": publication.nb_partages,
-            "commentaires": commentaires_list
+            "statut": publication.statut,
+            "nom_association": (publication.association.nom_complet if publication.association else None),
+            "commentaires": commentaires_tree
         }
-
         return jsonify(result), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# modifier commentaire
+
+@app.route("/update-comment/<int:comment_id>", methods=["PUT"])
+@jwt_required()
+def update_comment(comment_id):
+    try:
+        claims = get_jwt()
+        if claims.get("role") != "donator":
+            return jsonify({"error": "Accès refusé : donateur uniquement."}), 403
+
+        current_user_id = int(get_jwt_identity())
+        com = Commentaire.query.get(comment_id)
+        if not com:
+            return jsonify({"error": "Commentaire introuvable."}), 404
+        if com.id_user != current_user_id:
+            return jsonify({"error": "Vous ne pouvez modifier que vos propres commentaires."}), 403
+
+        data = request.get_json() or {}
+        contenu = (data.get("contenu") or "").strip()
+        if not contenu:
+            return jsonify({"error": "Le contenu est requis."}), 400
+
+        # Recalcule (optionnel) le sentiment
+        try:
+            com.sentiment = analyze_comment_fr(contenu)["label"]
+        except Exception:
+            pass
+
+        com.contenu = contenu
+        db.session.commit()
+
+        return jsonify({
+            "message": "✅ Commentaire mis à jour.",
+            "comment": serialize_comment_tree(com, current_user_id)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+# helper pour compter la taille du sous-arbre (comment + replies)
+def _count_comment_subtree(c: Commentaire) -> int:
+    total = 1
+    for r in c.replies:
+        total += _count_comment_subtree(r)
+    return total
+
+
+# supprimer commentaire
+@app.route("/delete-comment/<int:comment_id>", methods=["DELETE"])
+@jwt_required()
+def delete_comment(comment_id):
+    try:
+        claims = get_jwt()
+        if claims.get("role") != "donator":
+            return jsonify({"error": "Accès refusé : donateur uniquement."}), 403
+
+        current_user_id = int(get_jwt_identity())
+        com = Commentaire.query.get(comment_id)
+        if not com:
+            return jsonify({"error": "Commentaire introuvable."}), 404
+        if com.id_user != current_user_id:
+            return jsonify({"error": "Vous ne pouvez supprimer que vos propres commentaires."}), 403
+
+        pub = Publication.query.get(com.id_publication)
+        # décrémenter nb_commentaires du nombre total de noeuds supprimés
+        dec = _count_comment_subtree(com)
+        db.session.delete(com)
+        if pub:
+            pub.nb_commentaires = max(0, (pub.nb_commentaires or 0) - dec)
+
+        db.session.commit()
+        return jsonify({"message": "🗑️ Commentaire supprimé."}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    
+def _count_comment_subtree(c: Commentaire) -> int:
+    total = 1
+    for r in c.replies:
+        total += _count_comment_subtree(r)
+    return total
 
 
 # modifier publication
@@ -1935,6 +2070,97 @@ def add_comment(publication_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+@app.route("/reply-comment/<int:comment_id>", methods=["POST"])
+@jwt_required()
+def reply_comment(comment_id):
+    try:
+        claims = get_jwt()
+        if claims.get("role") != "association":
+            return jsonify({"error": "Accès refusé : seules les associations peuvent répondre."}), 403
+
+        # Récupération "user" (compte de l'association)
+        current_user_id = get_jwt_identity()
+        assoc_user = User.query.get(current_user_id)
+        if not assoc_user:
+            return jsonify({"error": "Utilisateur introuvable."}), 404
+
+        parent = Commentaire.query.get(comment_id)
+        if not parent:
+            return jsonify({"error": "Commentaire parent introuvable."}), 404
+
+        publication = Publication.query.get(parent.id_publication)
+        if not publication:
+            return jsonify({"error": "Publication introuvable."}), 404
+
+        # Vérifier propriété de la publication par cette association
+        assoc = Association.query.filter_by(email=claims.get("email")).first()
+        if not assoc or publication.id_association != assoc.id_association:
+            return jsonify({"error": "Vous ne pouvez répondre qu'aux commentaires de vos publications."}), 403
+
+        data = request.get_json()
+        contenu = (data.get("contenu") or "").strip()
+        if not contenu:
+            return jsonify({"error": "Le contenu de la réponse est requis."}), 400
+
+        # Optionnel: analyser le sentiment de la réponse
+        try:
+            scores = analyze_comment_fr(contenu)
+            sentiment_label = scores["label"]
+        except Exception:
+            sentiment_label = None
+
+        # Créer la réponse
+        reply = Commentaire(
+            contenu=contenu,
+            date_commentaire=datetime.utcnow().date(),
+            sentiment=sentiment_label,
+            id_publication=parent.id_publication,
+            id_user=current_user_id,          # l’auteur est le compte "User" de l’association
+            parent_comment_id=parent.id_commentaire
+        )
+        db.session.add(reply)
+
+        # Incrémenter le nombre total de commentaires de la publication
+        publication.nb_commentaires = (publication.nb_commentaires or 0) + 1
+
+        # Notifier l’auteur du commentaire parent (souvent un donateur)
+        try:
+            if parent.id_user:
+                contenu_notif = f"L'association {assoc.nom_complet} a répondu à votre commentaire sur « {publication.titre} »."
+                notif = Notification(
+                    contenu=contenu_notif,
+                    date=datetime.utcnow(),
+                    is_read=False,
+                    id_association=assoc.id_association,
+                    id_publication=publication.id_publication,
+                    id_user=parent.id_user  # cible = l’auteur du commentaire parent
+                )
+                db.session.add(notif)
+        except Exception:
+            pass
+
+        db.session.commit()
+        return jsonify({"message": "✅ Réponse publiée avec succès."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+def serialize_comment_tree(comment: Commentaire, current_user_id: int | None = None):
+    user = User.query.get(comment.id_user) if comment.id_user else None
+    return {
+        "id_commentaire": comment.id_commentaire,
+        "id_user": comment.id_user,  # 👈 utile côté front
+        "is_owner": (current_user_id is not None and comment.id_user == int(current_user_id)),
+        "contenu": comment.contenu,
+        "date_commentaire": comment.date_commentaire.isoformat(),
+        "sentiment": comment.sentiment,
+        "auteur": user.nom_complet if user else "Utilisateur",
+        "role_auteur": user.role if user else None,
+        "replies": [
+            serialize_comment_tree(r, current_user_id)
+            for r in sorted(comment.replies, key=lambda x: x.id_commentaire)
+        ]
+    }
 
 def create_notification_for_publication(association_id: int, publication_id: int, contenu: str, user_id: int | None = None):
     notif = Notification.query.filter_by(

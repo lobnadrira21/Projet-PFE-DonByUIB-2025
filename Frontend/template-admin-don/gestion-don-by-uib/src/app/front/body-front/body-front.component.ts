@@ -7,11 +7,12 @@ import { MatIcon, MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { RouterModule } from '@angular/router';
 import { AuthService } from 'app/services/auth.service';
-
+import { CommentThreadComponent } from '../comment-thread/comment-thread.component'; 
+import { CommentNode } from '../comment-thread/comment-thread.component'; 
 @Component({
   selector: 'app-body-front',
   standalone: true,
-  imports: [CommonModule,HttpClientModule,FormsModule,MatIconModule,MatFormFieldModule,MatInputModule, RouterModule],
+  imports: [CommonModule,HttpClientModule,FormsModule,MatIconModule,MatFormFieldModule,MatInputModule, RouterModule, CommentThreadComponent],
   templateUrl: './body-front.component.html',
   styleUrl: './body-front.component.scss'
 })
@@ -23,7 +24,10 @@ export class BodyFrontComponent implements OnInit {
   selectedPublication: any = null;
   newComment: string = '';
   donParticipants: { [key: number]: number } = {};
- 
+   role: string | null = null;
+   userId: number | null = null;
+editingCommentId: number | null = null;
+editBuffer: string = '';
 
 
   constructor(private authService: AuthService) {}
@@ -74,17 +78,15 @@ nextSlide() {
     }, 300);
   }
 
-  ngOnInit(): void {
+ ngOnInit(): void {
+    this.role = this.authService.getRole();      
     this.refreshDonsAndParticipants();
+    this.userId = this.authService.getUserId();
     this.authService.getPublications().subscribe({
-      next: (data) => {
-        this.publications = data;
-      },
-      error: (err) => {
-        console.error('Erreur lors du chargement des publications :', err);
-      }
+      next: (data) => { this.publications = data; },
+      error: (err) => console.error('Erreur chargement publications :', err)
+      
     });
-   
   }
 
   refreshDonsAndParticipants() {
@@ -126,21 +128,25 @@ nextSlide() {
   selectPublication(pub: any) {
     this.selectedPublication = pub;
   }
-
-  addComment() {
+    reloadSelectedPublication() {
+    if (!this.selectedPublication) return;
+    this.authService.getPublicationById(this.selectedPublication.id_publication).subscribe({
+      next: (pub) => this.selectedPublication = pub,
+      error: (err) => console.error('Erreur reload publication :', err)
+    });
+  }
+ onReplied() {
+    this.reloadSelectedPublication();
+  }
+   addComment() {
     const contenu = this.newComment.trim();
     const publicationId = this.selectedPublication?.id_publication;
-  
+
     if (contenu && publicationId) {
       this.authService.addComment(publicationId, contenu).subscribe({
-        next: (res) => {
-          // Ajouter le commentaire à l'affichage après succès
-          this.selectedPublication.commentaires.push({
-            nom: this.authService.getUsername() || 'Moi',
-            contenu: contenu
-          });
+        next: _ => {
           this.newComment = '';
-          console.log('✅ Commentaire ajouté :', res);
+          this.reloadSelectedPublication();  // on rafraîchit pour voir le nouveau commentaire
         },
         error: (err) => {
           console.error('❌ Erreur lors de l’ajout du commentaire :', err);
@@ -149,7 +155,10 @@ nextSlide() {
       });
     }
   }
-  
+  get selectedComments() {
+  return this.selectedPublication?.commentaires ?? [];
+}
+
 
   likeSelectedPublication() {
     if (!this.selectedPublication) return;
@@ -165,6 +174,54 @@ nextSlide() {
     });
   }
 
+startEditComment(c: any) {
+  if (this.role !== 'donator' || !c.is_owner) return;
+  this.editingCommentId = c.id_commentaire;
+  this.editBuffer = c.contenu;
+}
+
+cancelEditComment() {
+  this.editingCommentId = null;
+  this.editBuffer = '';
+}
+
+saveEditComment(c: any) {
+  const contenu = (this.editBuffer || '').trim();
+  if (!contenu) return;
+
+  this.authService.updateComment(c.id_commentaire, contenu).subscribe({
+    next: (res: any) => {
+      c.contenu = res?.comment?.contenu ?? contenu;
+      c.sentiment = res?.comment?.sentiment ?? c.sentiment;
+      this.editingCommentId = null;
+      this.editBuffer = '';
+    },
+    error: (err) => {
+      console.error('Update comment error:', err);
+      alert(err.error?.error || 'Erreur lors de la modification');
+    }
+  });
+}
+
+deleteComment(c: any, parentArray?: any[]) {
+  if (!confirm('Supprimer ce commentaire ?')) return;
+  this.authService.deleteComment(c.id_commentaire).subscribe({
+    next: () => {
+      // Enlève le commentaire supprimé du tableau courant
+      const removeFrom = parentArray ?? this.selectedPublication.commentaires;
+      const idx = removeFrom.findIndex((x: any) => x.id_commentaire === c.id_commentaire);
+      if (idx >= 0) removeFrom.splice(idx, 1);
+      // Décrémente l’affichage local (optionnel)
+      if (this.selectedPublication && typeof this.selectedPublication.nb_commentaires === 'number') {
+        this.selectedPublication.nb_commentaires = Math.max(0, this.selectedPublication.nb_commentaires - 1);
+      }
+    },
+    error: (err) => {
+      console.error('Delete comment error:', err);
+      alert(err.error?.error || 'Erreur lors de la suppression');
+    }
+  });
+}
 
 
 

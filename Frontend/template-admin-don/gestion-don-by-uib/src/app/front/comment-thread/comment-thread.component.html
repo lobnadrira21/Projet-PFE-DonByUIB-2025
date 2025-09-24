@@ -1,0 +1,45 @@
+<div class="thread">
+  <ng-container *ngFor="let c of comments">
+    <div class="comment-card">
+      <div class="comment-meta">
+        <span class="author" [class.assoc]="c.role_auteur === 'association'">
+          {{ c.auteur || 'Utilisateur' }}
+          <small *ngIf="c.role_auteur === 'association'" class="chip">Association</small>
+        </span>
+        <span class="date">{{ c.date_commentaire | date:'short' }}</span>
+      </div>
+
+      <div class="comment-body">
+        <p>{{ c.contenu }}</p>
+        <div class="meta-row">
+         
+
+          <button class="link-btn" *ngIf="canReply" (click)="toggleReplyBox(c.id_commentaire)">
+            <mat-icon>reply</mat-icon> Répondre
+          </button>
+        </div>
+
+        <!-- Formulaire réponse (association) -->
+        <div class="reply-box" *ngIf="canReply && replyOpen[c.id_commentaire]">
+          <mat-form-field appearance="outline" class="w-100">
+            <mat-label>Votre réponse</mat-label>
+            <input matInput [(ngModel)]="replyText[c.id_commentaire]" (keyup.enter)="sendReply(c.id_commentaire)" />
+          </mat-form-field>
+          <div class="reply-actions">
+            <button class="btn-cancel" (click)="toggleReplyBox(c.id_commentaire)">Annuler</button>
+            <button class="btn-send" (click)="sendReply(c.id_commentaire)">Envoyer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Réponses récursives -->
+    <div class="children" *ngIf="c.replies?.length">
+      <app-comment-thread
+        [comments]="c.replies"
+        [canReply]="canReply"
+        (replied)="replied.emit()"
+      ></app-comment-thread>
+    </div>
+  </ng-container>
+</div>
