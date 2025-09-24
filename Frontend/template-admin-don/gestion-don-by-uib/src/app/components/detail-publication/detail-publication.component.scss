@@ -1,17 +1,80 @@
+/* Assure un arrondi propre du dialog (optionnel, global si tu veux) */
+:host ::ng-deep .mdc-dialog__surface {
+  border-radius: 14px;
+}
+
+/* Ajoute du padding si ton thème ne le fait pas assez */
+:host ::ng-deep .mat-mdc-dialog-content {
+  padding: 0 24px 24px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.content {
+  display: grid;
+  gap: 16px;
+}
+
+.pub-title {
+  margin: 0;
+  line-height: 1.25;
+}
+
+.pub-contenu {
+  margin: 4px 0 8px 0;
+  color: #444;
+}
+
+.meta {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: #555;
+}
+
+.comments-title {
+  margin: 8px 0 0 0;
+}
+
+.comments {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+
+  li {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bullet { color: #bbb; }
+  .bubble { font-size: 16px; vertical-align: middle; margin-right: 4px; }
+  .text { color: #333; }
+  .author { font-weight: 600; margin-left: 6px; }
+  .date { color: #777; }
+}
+
+/* Badges */
 .badge {
-    padding: 4px 8px;
-    border-radius: 6px;
-    margin-left: 8px;
-    font-size: 12px;
-    color: white;
-  }
-  .badge-success {
-    background-color: #28a745;
-  }
-  .badge-warning {
-    background-color: #ffc107;
-  }
-  .badge-danger {
-    background-color: #dc3545;
-  }
-  
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-left: 8px;
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap;
+}
+.badge-success { background-color: #28a745; }
+.badge-warning { background-color: #ffc107; color: #222; }
+.badge-danger  { background-color: #dc3545; }
+
+/* États */
+.muted { color: #777; margin: 0; }
+.error { color: #b00020; margin: 0; }

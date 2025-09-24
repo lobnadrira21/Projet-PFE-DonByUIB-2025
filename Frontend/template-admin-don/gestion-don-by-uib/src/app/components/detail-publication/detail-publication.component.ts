@@ -2,7 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, Inject, OnInit } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { AuthService } from 'app/services/auth.service';
 
@@ -12,7 +14,8 @@ import { AuthService } from 'app/services/auth.service';
   imports: [ CommonModule,
       
       MatDialogModule,
-      
+      MatIconModule,
+    MatDividerModule,
       MatInputModule,
       MatButtonModule],
   templateUrl: './detail-publication.component.html',

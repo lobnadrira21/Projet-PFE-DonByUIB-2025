@@ -1,12 +1,19 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, Inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { AuthService } from 'app/services/auth.service';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { TextFieldModule } from '@angular/cdk/text-field';
+type Visibility = 'public' | 'private';
 
 @Component({
   selector: 'app-ajout-publication',
@@ -17,7 +24,13 @@ import { AuthService } from 'app/services/auth.service';
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
-    MatButtonModule
+    MatButtonModule,
+    MatIconModule,
+    MatChipsModule,
+    MatSlideToggleModule,
+    MatProgressBarModule,
+    MatTooltipModule,
+    TextFieldModule
   ],
   templateUrl: './ajout-publication.component.html',
   styleUrl: './ajout-publication.component.scss'
@@ -26,22 +39,46 @@ export class AjoutPublicationComponent {
   titre = '';
   contenu = '';
   errorMessage = '';
+  isSubmitting = false;
+
+  // Compteurs
+  maxTitle = 120;
+  maxContent = 2000;
 
   constructor(
     private authService: AuthService,
-    public dialogRef: MatDialogRef<AjoutPublicationComponent>
+    public dialogRef: MatDialogRef<AjoutPublicationComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: any
   ) {}
 
   submitPublication(): void {
-    const data = { titre: this.titre, contenu: this.contenu };
-    this.authService.addPublication(data).subscribe({
+    if (!this.titre.trim() || !this.contenu.trim()) {
+      this.errorMessage = 'Le titre et le contenu sont requis.';
+      return;
+    }
+    if (this.titre.length > this.maxTitle || this.contenu.length > this.maxContent) {
+      this.errorMessage = 'Vous avez dépassé la longueur autorisée.';
+      return;
+    }
+
+    this.errorMessage = '';
+    this.isSubmitting = true;
+
+    const payload = {
+      titre: this.titre.trim(),
+      contenu: this.contenu.trim()
+    };
+
+    this.authService.addPublication(payload).subscribe({
       next: () => this.dialogRef.close(true),
-      error: () => (this.errorMessage = 'Erreur lors de l’ajout.')
+      error: (err) => {
+        this.isSubmitting = false;
+        this.errorMessage = err?.error?.message || 'Erreur lors de l’ajout.';
+      }
     });
   }
 
   closeDialog(): void {
     this.dialogRef.close(false);
   }
-
 }

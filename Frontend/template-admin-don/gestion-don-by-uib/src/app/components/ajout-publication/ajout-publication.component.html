@@ -1,19 +1,52 @@
-<h2>Nouvelle publication</h2>
-<form (ngSubmit)="submitPublication()">
-  <mat-form-field appearance="outline" class="full-width">
-    <mat-label>Titre</mat-label>
-    <input matInput [(ngModel)]="titre" name="titre" required />
-  </mat-form-field>
+<h2 mat-dialog-title class="title">
+  <mat-icon>post_add</mat-icon>
+  Nouvelle publication
+</h2>
 
-  <mat-form-field appearance="outline" class="full-width">
-    <mat-label>Contenu</mat-label>
-    <textarea matInput rows="5" [(ngModel)]="contenu" name="contenu" required></textarea>
-  </mat-form-field>
+<mat-dialog-content>
+  <form (ngSubmit)="submitPublication()" class="form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Titre</mat-label>
+      <input
+        matInput
+        [(ngModel)]="titre"
+        name="titre"
+        [maxLength]="maxTitle"
+        required
+        placeholder="Ex. Collecte de vêtements d’hiver"
+      />
+      <mat-hint align="end">{{ titre.length || 0 }}/{{ maxTitle }}</mat-hint>
+    </mat-form-field>
 
-  <div class="actions">
-    <button mat-stroked-button color="warn" (click)="closeDialog()">Annuler</button>
-    <button mat-flat-button color="primary" type="submit">Publier</button>
-  </div>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Contenu</mat-label>
+      <textarea
+        matInput
+        cdkTextareaAutosize
+        cdkAutosizeMinRows="4"
+        cdkAutosizeMaxRows="10"
+        [(ngModel)]="contenu"
+        name="contenu"
+        [maxLength]="maxContent"
+        required
+        placeholder="Décrivez votre action, l’objectif, les besoins, etc."
+      ></textarea>
+      <mat-hint align="end">{{ contenu.length || 0 }}/{{ maxContent }}</mat-hint>
+    </mat-form-field>
 
-  <p *ngIf="errorMessage" class="error-message">{{ errorMessage }}</p>
-</form>
+    <p *ngIf="errorMessage" class="error-message">
+      <mat-icon>error_outline</mat-icon>
+      {{ errorMessage }}
+    </p>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-stroked-button color="warn" type="button" (click)="closeDialog()" [disabled]="isSubmitting">
+    Annuler
+  </button>
+  <button mat-flat-button color="primary" type="submit" form="ngForm" (click)="submitPublication()" [disabled]="isSubmitting">
+    <mat-icon>send</mat-icon>
+    {{ isSubmitting ? 'Publication…' : 'Publier' }}
+  </button>
+</mat-dialog-actions>

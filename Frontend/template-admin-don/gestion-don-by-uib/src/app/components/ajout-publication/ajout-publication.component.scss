@@ -1,0 +1,34 @@
+:host {
+  display: block;
+  max-width: 600px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+}
+
+.full-width { width: 100%; }
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #b00020;
+  margin: 0;
+}
+
+/* Optionnel : arrondir le dialog et assurer un padding si thème custom */
+:host ::ng-deep .mdc-dialog__surface {
+  border-radius: 14px;
+}
+:host ::ng-deep .mat-mdc-dialog-content {
+  padding: 0 24px 24px; /* applique un padding si ton thème ne l’a pas */
+}

@@ -1,35 +1,58 @@
-<div *ngIf="publication">
-  <h2>{{ publication.titre }}</h2>
-  <p class="content">{{ publication.contenu }}</p>
+<h2 mat-dialog-title class="title">
+  <mat-icon>article</mat-icon>
+  Détails de la publication
+</h2>
 
-  <p><strong>Date :</strong> {{ publication.date_publication | date }}</p>
-  <p><strong>Likes :</strong> {{ publication.nb_likes }}</p>
-  <p><strong>Commentaires :</strong> {{ publication.nb_commentaires }}</p>
+<mat-dialog-content class="content">
+  <ng-container *ngIf="publication; else loadingOrError">
+    <h3 class="pub-title">{{ publication.titre }}</h3>
+    <p class="pub-contenu">{{ publication.contenu }}</p>
 
-  <h3>Commentaires</h3>
-  <div *ngIf="publication.commentaires.length > 0; else noComments">
-    <ul>
-      <li *ngFor="let c of publication.commentaires">
-        🗨️ {{ c.contenu }}     — <b>{{ c.nom_donateur }}</b>  ({{ c.date_commentaire | date }})
-        <span 
-          class="badge"
-          [ngClass]="{
-            'badge-success': c.sentiment === 'positif',
-            'badge-warning': c.sentiment === 'neutre',
-            'badge-danger': c.sentiment === 'négatif'
-          }"
-        >
-          {{ c.sentiment }}
-        </span>
-      </li>
-    </ul>
-  </div>
+    <mat-divider></mat-divider>
 
-  <ng-template #noComments>
-    <p>Aucun commentaire pour le moment.</p>
+    <div class="meta">
+      <div><strong>Date :</strong> {{ publication.date_publication | date }}</div>
+      <div><strong>Likes :</strong> {{ publication.nb_likes }}</div>
+      <div><strong>Commentaires :</strong> {{ publication.nb_commentaires }}</div>
+    </div>
+
+    <h4 class="comments-title">Commentaires</h4>
+
+    <ng-container *ngIf="publication.commentaires?.length > 0; else noComments">
+      <ul class="comments">
+        <li *ngFor="let c of publication.commentaires">
+          <span class="bullet">•</span>
+          <span class="text">
+            <mat-icon class="bubble" inline>chat_bubble_outline</mat-icon>
+            {{ c.contenu }}
+            <span class="author">— {{ c.nom_donateur }}</span>
+            <span class="date"> ({{ c.date_commentaire | date }})</span>
+          </span>
+          <span
+            class="badge"
+            [ngClass]="{
+              'badge-success': c.sentiment === 'positif',
+              'badge-warning': c.sentiment === 'neutre',
+              'badge-danger': c.sentiment === 'négatif'
+            }"
+          >
+            {{ c.sentiment }}
+          </span>
+        </li>
+      </ul>
+    </ng-container>
+
+    <ng-template #noComments>
+      <p class="muted">Aucun commentaire pour le moment.</p>
+    </ng-template>
+  </ng-container>
+
+  <ng-template #loadingOrError>
+    <p *ngIf="!error" class="muted">Chargement…</p>
+    <p *ngIf="error" class="error">{{ error }}</p>
   </ng-template>
-</div>
+</mat-dialog-content>
 
-<div *ngIf="error" class="error">{{ error }}</div>
-
-<button mat-stroked-button color="primary" (click)="close()">Fermer</button>
+<mat-dialog-actions align="end">
+  <button mat-stroked-button color="primary" (click)="close()">Fermer</button>
+</mat-dialog-actions>
