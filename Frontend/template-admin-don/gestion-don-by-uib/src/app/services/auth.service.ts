@@ -77,6 +77,23 @@ isLoggedIn(): boolean {
   return !!this.getToken(); // Retourne true si un token est présent, sinon false
 }
 
+// auth.service.ts
+getRole(): string | null {
+  // primary source: what you saved at login
+  const stored = localStorage.getItem('role');
+  if (stored) return stored;
+
+  // optional fallback: read from JWT if your backend puts "role" in token
+  const token = this.getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 
   /** Register a new user */
 register(userData: any): Observable<any> {

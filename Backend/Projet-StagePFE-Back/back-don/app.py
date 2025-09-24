@@ -13,7 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import timedelta, datetime, date
 from sqlalchemy.orm import relationship
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey,CheckConstraint, UniqueConstraint, Index
 import requests
 import ast
 from metrics import metrics_bp
@@ -249,17 +249,40 @@ class Notification(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
 
-    id_association = db.Column(db.Integer, db.ForeignKey("associations.id_association", ondelete="CASCADE"), nullable=False)
-    id_publication = db.Column(db.Integer, db.ForeignKey("publications.id_publication", ondelete="CASCADE"), nullable=True)
-    id_don = db.Column(db.Integer, db.ForeignKey("dons.id_don", ondelete="CASCADE"), nullable=True)  # ✅ AJOUTÉ ICI
+    id_association = db.Column(db.Integer, db.ForeignKey("associations.id_association", ondelete="CASCADE"), nullable=False, index=True)
+    id_publication = db.Column(db.Integer, db.ForeignKey("publications.id_publication", ondelete="CASCADE"), nullable=True, index=True)
+    id_don = db.Column(db.Integer, db.ForeignKey("dons.id_don", ondelete="CASCADE"), nullable=True, index=True)  
 
     association = db.relationship("Association", backref=db.backref("notifications", lazy=True, cascade="all, delete-orphan"))
     publication = db.relationship("Publication", backref=db.backref("notifications", lazy=True, cascade="all, delete-orphan"))
     don = db.relationship("Don", backref=db.backref("notifications", lazy=True, cascade="all, delete-orphan"))  # ✅ AJOUTÉ ICI
 
-    id_user = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    id_user = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     user = db.relationship("User", backref="notifications")
+    
+    __table_args__ = (
+        # Exactly one source must be set (XOR)
+        CheckConstraint(
+            "(id_publication IS NOT NULL AND id_don IS NULL) OR "
+            "(id_publication IS NULL AND id_don IS NOT NULL)",
+            name="ck_notifications_exactly_one_source"
+        ),
 
+        # Avoid duplicates for publication-sourced notifs
+        UniqueConstraint(
+            "id_association", "id_publication", "contenu",
+            name="uq_notifications_pub_once"
+        ),
+
+        # Avoid duplicates for don-sourced notifs
+        UniqueConstraint(
+            "id_association", "id_don", "contenu",
+            name="uq_notifications_don_once"
+        ),
+
+        # Helpful composite index for listing latest
+        Index("ix_notifications_assoc_date", "id_association", "date")
+    )
 # ---------- Methods ---------
 @app.before_request
 
@@ -596,8 +619,8 @@ def request_password_reset():
     msg.body = (
         "Bonjour,\n\n"
         "Réinitialisez votre mot de passe avec l’un de ces liens :\n"
-        f"- Web (Angular) : {link_web}\n"
-        f"- Ionic (mobile) : {link_ionic}\n\n"
+        f"- Web  : {link_web}\n"
+        f"- Ionic : {link_ionic}\n\n"
         "Le lien expire dans 30 minutes."
     )
 
@@ -1760,7 +1783,9 @@ def get_publication_detail(id):
                 "id_commentaire": c.id_commentaire,
                 "contenu": c.contenu,
                 "date_commentaire": c.date_commentaire.isoformat(),
-                "sentiment":c.sentiment
+                "sentiment":c.sentiment,
+                "nom_donateur": User.query.get(c.id_user).nom_complet if c.id_user else "Utilisateur"
+                
             } for c in publication.commentaires
         ]
 
@@ -1911,7 +1936,68 @@ def add_comment(publication_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-    
+def create_notification_for_publication(association_id: int, publication_id: int, contenu: str, user_id: int | None = None):
+    notif = Notification.query.filter_by(
+        id_association=association_id,
+        id_publication=publication_id,
+        id_don=None,
+        contenu=contenu
+    ).first()
+    if notif:
+        return notif
+
+    notif = Notification(
+        id_association=association_id,
+        id_publication=publication_id,
+        id_don=None,
+        contenu=contenu,
+        id_user=user_id
+    )
+    db.session.add(notif)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # race-safety: re-fetch if unique constraint hit
+        notif = Notification.query.filter_by(
+            id_association=association_id,
+            id_publication=publication_id,
+            id_don=None,
+            contenu=contenu
+        ).first()
+    return notif
+
+
+def create_notification_for_don(association_id: int, don_id: int, contenu: str, user_id: int | None = None):
+    notif = Notification.query.filter_by(
+        id_association=association_id,
+        id_publication=None,
+        id_don=don_id,
+        contenu=contenu
+    ).first()
+    if notif:
+        return notif
+
+    notif = Notification(
+        id_association=association_id,
+        id_publication=None,
+        id_don=don_id,
+        contenu=contenu,
+        id_user=user_id
+    )
+    db.session.add(notif)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        notif = Notification.query.filter_by(
+            id_association=association_id,
+            id_publication=None,
+            id_don=don_id,
+            contenu=contenu
+        ).first()
+    return notif
+
 #get notification (association)
 
 @app.route("/notifications", methods=["GET"])

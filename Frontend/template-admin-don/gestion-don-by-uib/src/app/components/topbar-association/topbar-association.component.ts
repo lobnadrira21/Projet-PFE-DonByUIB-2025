@@ -19,73 +19,65 @@ export class TopbarAssociationComponent implements OnInit {
   private toggleButton: any;
   private sidebarVisible: boolean;
   associationName: string = ''; 
+  trackById = (_: number, n: any) => n.id;
+
 
   constructor(location: Location,  private element: ElementRef, private router: Router,private authService: AuthService) {
     this.location = location;
         this.sidebarVisible = false;
   }
 
-  ngOnInit(){
-    this.listTitles = ROUTES.filter(listTitle => listTitle);
-    const navbar: HTMLElement = this.element.nativeElement;
-    this.toggleButton = navbar.getElementsByClassName('navbar-toggler')[0];
-    this.router.events.subscribe((event) => {
-      this.sidebarClose();
-       var $layer: any = document.getElementsByClassName('close-layer')[0];
-       if ($layer) {
-         $layer.remove();
-         this.mobile_menu_visible = 0;
-       }
-   });
+ ngOnInit() {
+  this.listTitles = ROUTES.filter(listTitle => listTitle);
 
-   this.authService.getProfile().subscribe({
-    next: (data) => {
-      this.associationName = data.nom_complet;
-    },
-    error: (err) => {
-      console.error('Erreur lors du chargement du nom :', err);
-    }
-  });
+  const navbar: HTMLElement = this.element.nativeElement;
+  this.toggleButton = navbar.getElementsByClassName('navbar-toggler')[0];
 
-  this.router.events.subscribe((event) => {
+  // 🔧 Garde un seul abonnement Router
+  this.router.events.subscribe(() => {
     this.sidebarClose();
-    var $layer: any = document.getElementsByClassName('close-layer')[0];
+    const $layer: any = document.getElementsByClassName('close-layer')[0];
     if ($layer) {
       $layer.remove();
       this.mobile_menu_visible = 0;
     }
   });
-// Supprimer les notifications de plus de 24h (appel backend)
- this.authService.cleanupOldNotifications().subscribe({
-      next: (res) => {
-        console.log("🧹 Notifications anciennes nettoyées :", res);
 
-        // Étape 2 : Récupérer les notifications à jour
-        this.loadFreshNotifications();
-      },
-      error: (err) => {
-        console.error("Erreur lors du nettoyage des notifications :", err);
-        this.loadFreshNotifications();  // Charger quand même
-      }
-    });
-  }
+  this.authService.getProfile().subscribe({
+    next: (data) => this.associationName = data.nom_complet,
+    error: (err) => console.error('Erreur lors du chargement du nom :', err)
+  });
+
+  // Nettoyage back puis chargement
+  this.authService.cleanupOldNotifications().subscribe({
+    next: () => this.loadFreshNotifications(),
+    error: () => this.loadFreshNotifications()
+  });
+}
+
 
   loadFreshNotifications() {
-    this.authService.getNotifications().subscribe({
-      next: (data) => {
-        // ✅ Supprime côté Angular les notifs de + de 24h (juste au cas où)
-        const now = new Date();
-        this.notifications = data.filter((notif: any) => {
-          const notifDate = new Date(notif.date);
-          const diffHours = (now.getTime() - notifDate.getTime()) / (1000 * 60 * 60);
-          return diffHours <= 24;
-        });
+  this.authService.getNotifications().subscribe({
+    next: (data) => {
+      const now = new Date();
 
-        console.log("🔔 Notifications récentes affichées :", this.notifications);
-      },
-      error: (err) => console.error('Erreur lors du chargement des notifications :', err)
-    });
-  }
+      // ⛔ ne pas concaténer, on remplace
+      const recent = data.filter((n: any) => {
+        const d = new Date(n.date);
+        return (now.getTime() - d.getTime()) / (1000 * 60 * 60) <= 24;
+      });
+
+      // 🧩 dédup par id (au cas où)
+      const map = new Map<number, any>();
+      recent.forEach((n: any) => map.set(n.id, n));
+      this.notifications = Array.from(map.values()).sort(
+        (a, b) => +new Date(b.date) - +new Date(a.date)
+      );
+    },
+    error: (err) => console.error('Erreur lors du chargement des notifications :', err)
+  });
+}
+
 
   sidebarOpen() {
       const toggleButton = this.toggleButton;

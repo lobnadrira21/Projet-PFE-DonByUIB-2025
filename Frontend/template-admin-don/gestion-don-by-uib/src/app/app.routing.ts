@@ -46,7 +46,7 @@ export const routes: Routes = [
 
 
   // 🚀 **Client Page (ONLY for logged-out users)**
-  { path: 'client', component: PageclientComponent, canActivate: [NoAuthGuard] }, // ✅ Apply NoAuthGuard
+  { path: 'client', component: PageclientComponent}, // ✅ Apply NoAuthGuard
 
   // 🚀 **Admin Dashboard (Protected)**
   {

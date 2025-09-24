@@ -13,6 +13,7 @@ import { AuthService } from 'app/services/auth.service';
 export class HeaderFrontComponent implements OnInit {
   isLoggedIn: boolean = false;
   username: string | null = null;
+  role: 'admin' | 'association' | 'donator' | null = null;
   @HostListener("window:scroll", [])
   onWindowScroll() {
     const header = document.querySelector(".header") as HTMLElement;
@@ -27,11 +28,18 @@ export class HeaderFrontComponent implements OnInit {
     this.isLoggedIn = !!this.authService.getToken();
     if (this.isLoggedIn) {
       this.username = localStorage.getItem('username');  // 👈 Doit être défini
-      console.log("👤 Utilisateur connecté :", this.username);
-    }
+      this.role = (this.authService.getRole?.() || localStorage.getItem('role')) as any;    }
   }
   
-
+   get returnRoute(): string {
+    if (!this.isLoggedIn) return '/login';
+    switch (this.role) {
+      case 'admin':        return '/dashboard';
+      case 'association':  return '/dashboard-association';
+      case 'donator':      return '/dashboard-donator';
+      default:             return '/client';
+    }
+  }
   goToLogin() {
     this.router.navigate(['/login']);
   }

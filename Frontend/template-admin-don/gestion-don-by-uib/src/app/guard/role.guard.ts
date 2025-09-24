@@ -1,32 +1,28 @@
 import { Injectable } from '@angular/core';
-import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router } from '@angular/router';
+import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router, UrlTree } from '@angular/router';
 import { AuthService } from 'app/services/auth.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class RoleGuard implements CanActivate {
-  constructor(private router: Router) {}
+  constructor(private router: Router, private auth:AuthService) {}
 
-  canActivate(route: ActivatedRouteSnapshot): boolean {
-    console.log("🔍 RoleGuard - Checking role...");
-    const role = localStorage.getItem('role');
-    console.log("🔍 Stored Role:", role);
+   canActivate(route: ActivatedRouteSnapshot, _state: RouterStateSnapshot): boolean | UrlTree {
+    const token = this.auth.getToken();
+    if (!token) return this.router.parseUrl('/login');
 
-    if (!role) {
-      console.log("🚨 No role found! Redirecting to login...");
-      this.router.navigate(['/login']);
-      return false;
-    }
+    const expected = route.data['role'] as string;
+    const role = this.auth.getRole();
 
-    const expectedRole = route.data['role'];
-    if (expectedRole && role !== expectedRole) {
-      console.log(`🚨 Role mismatch! Expected: ${expectedRole}, Found: ${role}`);
-      this.router.navigate(['/login']);
-      return false;
-    }
+    if (role === expected) return true;
 
-    console.log("✅ Role is valid, access granted.");
-    return true;
+    // Logged-in but wrong route → send to their own dashboard
+    const target =
+      role === 'admin'       ? '/dashboard' :
+      role === 'association' ? '/dashboard-association' :
+      role === 'donator'     ? '/dashboard-donator' :
+                               '/client';
+    return this.router.parseUrl(target);
   }
 }
