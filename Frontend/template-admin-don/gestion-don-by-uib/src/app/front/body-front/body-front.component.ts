@@ -28,7 +28,8 @@ export class BodyFrontComponent implements OnInit {
    userId: number | null = null;
 editingCommentId: number | null = null;
 editBuffer: string = '';
-
+replyBuffers: Record<number, string> = {};
+replyingOpen: Record<number, boolean> = {};
 
   constructor(private authService: AuthService) {}
 
@@ -133,6 +134,33 @@ nextSlide() {
     this.authService.getPublicationById(this.selectedPublication.id_publication).subscribe({
       next: (pub) => this.selectedPublication = pub,
       error: (err) => console.error('Erreur reload publication :', err)
+    });
+  }
+
+   openReply(commentId: number) {
+    this.replyingOpen[commentId] = true;
+    if (this.replyBuffers[commentId] == null) this.replyBuffers[commentId] = '';
+  }
+
+  cancelReply(commentId: number) {
+    this.replyingOpen[commentId] = false;
+    this.replyBuffers[commentId] = '';
+  }
+   sendReply(parent: any) {
+    const cid = parent.id_commentaire;
+    const contenu = (this.replyBuffers[cid] || '').trim();
+    if (!contenu) return;
+
+    this.authService.replyComment(cid, contenu).subscribe({
+      next: () => {
+        this.replyBuffers[cid] = '';
+        this.replyingOpen[cid] = false;
+        this.reloadSelectedPublication();
+      },
+      error: (err) => {
+        console.error('Reply error:', err);
+        alert(err?.error?.error || 'Erreur lors de la réponse');
+      }
     });
   }
  onReplied() {

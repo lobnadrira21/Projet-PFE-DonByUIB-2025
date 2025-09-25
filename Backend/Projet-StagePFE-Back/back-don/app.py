@@ -14,7 +14,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import timedelta, datetime, date
 from sqlalchemy.orm import relationship
-from sqlalchemy import ForeignKey,CheckConstraint, UniqueConstraint, Index
+
 import requests
 from typing import Optional
 import ast
@@ -244,12 +244,7 @@ class Commentaire(db.Model):
     )
     id_user = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
-from enum import Enum
-class NotificationType(str, Enum):
-    COMMENT = "comment"               # donor commented on a publication
-    PAYMENT = "payment"               # donor participated in a donation
-    ADMIN_VALIDATION = "admin_validation"  # admin validated/refused a don/publication
-    SYSTEM = "system"   
+
 
 class Notification(db.Model):
     __tablename__ = "notifications"
@@ -258,7 +253,7 @@ class Notification(db.Model):
     contenu = db.Column(db.Text, nullable=False)
     date = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
-    type = db.Column(db.String(32), nullable=False, server_default=NotificationType.SYSTEM.value)
+  
     id_association = db.Column(db.Integer, db.ForeignKey("associations.id_association", ondelete="CASCADE"), nullable=False, index=True)
     id_publication = db.Column(db.Integer, db.ForeignKey("publications.id_publication", ondelete="CASCADE"), nullable=True, index=True)
     id_don = db.Column(db.Integer, db.ForeignKey("dons.id_don", ondelete="CASCADE"), nullable=True, index=True)  
@@ -270,23 +265,6 @@ class Notification(db.Model):
     id_user = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     user = db.relationship("User", backref="notifications")
     
-    __table_args__ = (
-        # Exactly one source must be set (XOR)
-        CheckConstraint(
-            "(id_publication IS NOT NULL AND id_don IS NULL) OR "
-            "(id_publication IS NULL AND id_don IS NOT NULL)",
-            name="ck_notifications_exactly_one_source"
-        ),
-
-        # Avoid duplicates for publication-sourced notifs
-         UniqueConstraint("id_association", "id_publication", "contenu", "id_user",
-                     name="uq_notifications_pub_once"),
-         UniqueConstraint("id_association", "id_don", "contenu", "id_user",
-                     name="uq_notifications_don_once"),
-
-        # Helpful composite index for listing latest
-         Index("ix_notifications_assoc_date", "id_association", "date")
-    )
 
 # ---------- Methods ---------
 @app.before_request
@@ -1223,44 +1201,49 @@ def delete_don(id_don):
 @app.route("/don/<int:id_don>/valider", methods=["PUT"])
 @jwt_required()
 def valider_don(id_don):
-    claims = get_jwt()
-    if claims.get("role") != "admin":
+    if get_jwt().get("role") != "admin":
         return jsonify({"error": "Accès refusé"}), 403
 
     don = Don.query.get(id_don)
     if not don:
         return jsonify({"error": "Don introuvable"}), 404
 
-    don.statut = "valide"
-    id_assoc = don.id_association
-    # ✅ Notification
-    notif_assoc = Notification(
-    contenu=f"Le don '{don.titre}' a été validé par l’administrateur.",
-    id_association=id_assoc,
-    is_read=False,
-    id_don=don.id_don,
-    date=datetime.utcnow(),
-    type=NotificationType.ADMIN_VALIDATION.value
-)
+    try:
+        don.statut = "valide"
+        id_assoc = don.id_association
 
-    db.session.add(notif_assoc)
-    # 🔔 Notifier tous les donateurs
-    utilisateurs = User.query.filter_by(role='donator').all()
-    for user in utilisateurs:
-        notif = Notification(
-            contenu=f"Nouveau don : {don.titre}",
-            date=datetime.utcnow(),
+        # notif association (admin a validé)
+        notif_assoc = Notification(
+            contenu=f"Le don '{don.titre}' a été validé par l’administrateur.",
+            id_association=id_assoc,
             is_read=False,
-            id_association=id_assoc,  
-            id_user=user.id,
-            id_don=don.id_don 
+            id_don=don.id_don,
+            date=datetime.utcnow(),
+            
         )
-        db.session.add(notif)
+        db.session.add(notif_assoc)
 
-  
+        # notifs pour tous les donateurs
+        utilisateurs = User.query.filter_by(role='donator').all()
+        for user in utilisateurs:
+            db.session.add(Notification(
+                contenu=f"Nouveau don : {don.titre}",
+                date=datetime.utcnow(),
+                is_read=False,
+                id_association=id_assoc,
+                id_user=user.id,
+                id_don=don.id_don,
+                
+            ))
 
-    db.session.commit()
-    return jsonify({"message": "Don validé avec succès"}), 200
+        db.session.commit()
+        return jsonify({"message": "Don validé avec succès"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        # utile en dev pour voir l’erreur exacte
+        return jsonify({"error": "Insertion notification échouée", "detail": str(e)}), 500
+
 # supprimer les notifications qui dépassent 24h
 @app.route('/notifications/cleanup', methods=['DELETE'])
 @jwt_required()
@@ -1298,7 +1281,7 @@ def refuser_don(id_don):
         contenu=f"Le don '{don.titre}' a été refusé par l’administrateur.",
         id_association=don.id_association,
         date=datetime.utcnow(),
-        type=NotificationType.ADMIN_VALIDATION.value
+        
     )
     db.session.add(notif)
 
@@ -1368,7 +1351,7 @@ def valider_publication(id_publication):
         is_read=False,
         id_association=id_assoc,
         id_publication=publication.id_publication,
-        type=NotificationType.ADMIN_VALIDATION.value
+        
     )
     db.session.add(notif_assoc)
     # 🔔 Notifier tous les donateurs
@@ -1381,7 +1364,7 @@ def valider_publication(id_publication):
             id_association=id_assoc,  # ✅ On met ici la bonne valeur
             id_user=user.id,
             id_publication=publication.id_publication,
-            type=NotificationType.SYSTEM.value
+            
         )
         db.session.add(notif)
     
@@ -1406,10 +1389,10 @@ def refuser_publication(id_publication):
     notif = Notification(
         contenu=f"La publication '{publication.titre}' a été refusée par l’administrateur.",
         id_publication=publication.id_publication,
-        id_association=publication.id_association,  # ✅ ceci est nécessaire
+        id_association=publication.id_association,  
         date=datetime.utcnow(),
         is_read=False,  # si ce champ existe
-        type=NotificationType.ADMIN_VALIDATION.value
+     
     )
     db.session.add(notif)
     db.session.commit()
@@ -1595,7 +1578,7 @@ def participate(id_don):
         id_don=don.id_don,
         is_read=False,
         date=datetime.utcnow(),
-        type=NotificationType.PAYMENT.value
+       
         )
         db.session.add(notif)
 
@@ -2060,8 +2043,8 @@ def add_comment(publication_id):
             contenu=f"Nouveau 💬 à {publication.titre} : {contenu_commentaire.strip()}",
             date=datetime.utcnow(),
             id_association=publication.id_association,
-            id_publication=publication.id_publication,        # ✅ REQUIRED by XOR
-            type=NotificationType.COMMENT.value   
+            id_publication=publication.id_publication,      
+          
         )
         db.session.add(notif)
         publication.nb_commentaires += 1
@@ -2116,7 +2099,7 @@ def reply_comment(comment_id):
             sentiment=sentiment_label,
             id_publication=parent.id_publication,
             id_user=current_user_id,
-            parent_comment_id=parent.id_commentaire,   # 👈 FK vers commentaire parent
+            parent_comment_id=parent.id_commentaire,   # cle etrangere vers commentaire parent
         )
         db.session.add(reply)
 
@@ -2132,7 +2115,7 @@ def reply_comment(comment_id):
                     id_association=assoc.id_association,
                     id_publication=publication.id_publication,
                     id_user=parent.id_user,
-                    type=NotificationType.COMMENT.value, 
+                   
                 )
                 db.session.add(notif)
         except Exception:
@@ -2179,138 +2162,6 @@ def serialize_comment_tree(comment: Commentaire, current_user_id: int | None = N
 
 
 
-def _actor_is_role(user_id: Optional[int], role: str) -> bool:
-    if not user_id:
-        return False
-    u = User.query.get(user_id)
-    return bool(u and getattr(u, "role", None) == role)
-
-def _is_self_action(association_id: int, actor_user_id: Optional[int]) -> bool:
-    """True if the actor is the same association (avoid self-notify)."""
-    if not actor_user_id:
-        return False
-    assoc = Association.query.get(association_id)
-    if not assoc:
-        return False
-    # same email or explicit linkage
-    user = User.query.get(actor_user_id)
-    return bool(user and assoc.email and assoc.email == user.email)
-
-def _commit_safely():
-    try:
-        db.session.commit()
-        return True
-    except Exception:
-        db.session.rollback()
-        return False
-
-def create_notification_for_publication(
-    association_id: int,
-    publication_id: int,
-    contenu: str,
-    *,
-    actor_user_id: Optional[int] = None
-) -> Optional[Notification]:
-    """Donor commented on an association's publication."""
-    # only donors can trigger this
-    if not _actor_is_role(actor_user_id, "donator"):
-        return None
-    if _is_self_action(association_id, actor_user_id):
-        return None
-
-    existing = Notification.query.filter_by(
-        id_association=association_id,
-        id_publication=publication_id,
-        id_don=None,
-        type=NotificationType.COMMENT.value,
-        contenu=contenu
-    ).first()
-    if existing:
-        return existing
-
-    notif = Notification(
-        id_association=association_id,
-        id_publication=publication_id,
-        id_don=None,
-        id_user=None,  # target is association inbox
-        type=NotificationType.COMMENT.value,
-        contenu=contenu,
-        date=datetime.utcnow()
-    )
-    db.session.add(notif)
-    _commit_safely()
-    return notif
-
-def create_notification_for_don(
-    association_id: int,
-    don_id: int,
-    contenu: str,
-    *,
-    actor_user_id: Optional[int] = None
-) -> Optional[Notification]:
-    """Donor participated in a donation of the association."""
-    if not _actor_is_role(actor_user_id, "donator"):
-        return None
-    if _is_self_action(association_id, actor_user_id):
-        return None
-
-    existing = Notification.query.filter_by(
-        id_association=association_id,
-        id_publication=None,
-        id_don=don_id,
-        type=NotificationType.PAYMENT.value,
-        contenu=contenu
-    ).first()
-    if existing:
-        return existing
-
-    notif = Notification(
-        id_association=association_id,
-        id_publication=None,
-        id_don=don_id,
-        id_user=None,  # target association
-        type=NotificationType.PAYMENT.value,
-        contenu=contenu,
-        date=datetime.utcnow()
-    )
-    db.session.add(notif)
-    _commit_safely()
-    return notif
-
-def create_notification_admin_validation(
-    association_id: int,
-    *,
-    don_id: Optional[int] = None,
-    publication_id: Optional[int] = None,
-    admin_user_id: Optional[int] = None,
-    contenu: str
-) -> Optional[Notification]:
-    """Admin validated/refused a don or publication of an association."""
-    if not _actor_is_role(admin_user_id, "admin"):
-        return None
-
-    existing = Notification.query.filter_by(
-        id_association=association_id,
-        id_publication=publication_id,
-        id_don=don_id,
-        type=NotificationType.ADMIN_VALIDATION.value,
-        contenu=contenu
-    ).first()
-    if existing:
-        return existing
-
-    notif = Notification(
-        id_association=association_id,
-        id_publication=publication_id,
-        id_don=don_id,
-        id_user=None,  # target association
-        type=NotificationType.ADMIN_VALIDATION.value,
-        contenu=contenu,
-        date=datetime.utcnow()
-    )
-    db.session.add(notif)
-    _commit_safely()
-    return notif
 
 #get notification (association)
 @app.route("/notifications", methods=["GET"])
@@ -2331,7 +2182,6 @@ def get_notifications():
     notifs = (
         Notification.query
         .filter_by(id_association=association.id_association)
-        .filter(Notification.type.in_(["comment", "payment", "admin_validation"]))
         .order_by(Notification.date.desc())
         .all()
     )

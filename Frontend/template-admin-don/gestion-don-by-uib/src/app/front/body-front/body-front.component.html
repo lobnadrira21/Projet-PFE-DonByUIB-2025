@@ -163,41 +163,54 @@
   <ng-template #commentNode let-list>
     <div *ngFor="let c of list" class="comment">
       <div class="d-flex justify-content-between align-items-start">
-        <div>
-          <strong>{{ c.auteur }}</strong>
-          <small class="text-muted"> • {{ c.date_commentaire | date }}</small>
-          <span *ngIf="c.sentiment" class="badge bg-light text-dark" style="margin-left:6px;">
-            {{ c.sentiment }}
-          </span>
-        </div>
+  <div>
+    <strong>{{ c.auteur }}</strong>
+    <small class="text-muted"> • {{ c.date_commentaire | date }}</small>
+    
+  </div>
 
-        <!-- Actions pour le propriétaire (donateur) -->
-        <div *ngIf="role === 'donator' && c.is_owner" class="btn-group" style="gap:6px;">
-          <button class="btn btn-sm btn-outline-secondary" (click)="startEditComment(c)">
-            Modifier
-          </button>
-          <button class="btn btn-sm btn-outline-danger" (click)="deleteComment(c, list)">
-            Supprimer
-          </button>
-        </div>
-      </div>
+  <!-- Actions pour le propriétaire (donateur) -->
+  <div *ngIf="role === 'donator' && c.is_owner" class="btn-group" style="gap:6px;">
+    <button class="btn btn-sm btn-outline-secondary" (click)="startEditComment(c)">
+      Modifier
+    </button>
+    <button class="btn btn-sm btn-outline-danger" (click)="deleteComment(c, list)">
+      Supprimer
+    </button>
+  </div>
+</div>
 
-      <!-- Contenu ou éditeur -->
-      <div *ngIf="editingCommentId !== c.id_commentaire; else editBlock" style="margin-top:6px;">
-        {{ c.contenu }}
-      </div>
+<!-- Contenu ou éditeur -->
+<div *ngIf="editingCommentId !== c.id_commentaire; else editBlock" style="margin-top:6px;">
+  {{ c.contenu }}
+</div>
 
-      <ng-template #editBlock>
-        <div class="d-flex" style="gap:8px; margin-top:6px;">
-          <input
-            class="form-control"
-            [(ngModel)]="editBuffer"
-            (keyup.enter)="saveEditComment(c)"
-          />
-          <button class="btn btn-primary btn-sm" (click)="saveEditComment(c)">Sauver</button>
-          <button class="btn btn-light btn-sm" (click)="cancelEditComment()">Annuler</button>
-        </div>
-      </ng-template>
+<ng-template #editBlock>
+  <div class="d-flex" style="gap:8px; margin-top:6px;">
+    <input class="form-control" [(ngModel)]="editBuffer" (keyup.enter)="saveEditComment(c)" />
+    <button class="btn btn-primary btn-sm" (click)="saveEditComment(c)">Sauver</button>
+    <button class="btn btn-light btn-sm" (click)="cancelEditComment()">Annuler</button>
+  </div>
+</ng-template>
+
+<!-- ✅ Répondre  -->
+<div *ngIf="role === 'association'" class="mt-2">
+  <button class="btn btn-sm btn-outline-primary"
+          (click)="openReply(c.id_commentaire)"
+          *ngIf="!replyingOpen?.[c.id_commentaire]">
+    Répondre
+  </button>
+
+  <div *ngIf="replyingOpen?.[c.id_commentaire]" class="d-flex align-items-start mt-2" style="gap:8px;">
+    <input class="form-control"
+           placeholder="Votre réponse..."
+           [(ngModel)]="replyBuffers[c.id_commentaire]"
+           (keyup.enter)="sendReply(c)" />
+    <button class="btn btn-primary btn-sm" (click)="sendReply(c)">Envoyer</button>
+    <button class="btn btn-light btn-sm" (click)="cancelReply(c.id_commentaire)">Annuler</button>
+  </div>
+</div>
+      
 
       <!-- Enfants -->
       <div *ngIf="c.replies?.length" style="margin-left:18px; margin-top:10px;">
