@@ -4,6 +4,7 @@ import {CommonModule, Location, LocationStrategy, PathLocationStrategy} from '@a
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from 'app/services/auth.service';
 import { ROUTES } from '../sidemenu-association/sidemenu-association.component';
+
 @Component({
   selector: 'app-topbar-association',
   standalone: true,
@@ -171,5 +172,16 @@ export class TopbarAssociationComponent implements OnInit {
   logout() {
     this.authService.logout(); // Call the logout function from AuthService
   }
+
+  // topbar-association.component.ts
+getNotifRoute(n: any): any[] {
+  // commentaire/validation/refus d’une publication
+  if (n.id_publication) return ['/dashboard-association/table-publication'];
+  // participation/validation/refus d’un don
+  if (n.id_don) return ['/dashboard-association/table-list'];
+  // fallback
+  return ['/dashboard-association'];
+}
+
 
 }

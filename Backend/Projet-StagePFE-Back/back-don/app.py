@@ -2179,20 +2179,20 @@ def get_notifications():
     if not association:
         return jsonify({"error": "Association not found"}), 404
 
-    notifs = (
-        Notification.query
-        .filter_by(id_association=association.id_association)
-        .order_by(Notification.date.desc())
-        .all()
-    )
+    notifs = (Notification.query
+              .filter(Notification.id_association == association.id_association,
+                      Notification.id_user == None)  
+              .order_by(Notification.date.desc())
+              .all())
 
     return jsonify([
         {
             "id": n.id,
-            "type": n.type,
             "contenu": n.contenu,
             "date": n.date.isoformat(),
-            "is_read": n.is_read
+            "is_read": n.is_read,
+            "id_don": n.id_don,
+            "id_publication": n.id_publication
         }
         for n in notifs
     ])
@@ -2217,7 +2217,6 @@ def get_notifications_donator():
     return jsonify([
         {
             "id": n.id,
-            "type": n.type,
             "contenu": n.contenu,
             "date": n.date.isoformat(),
             "is_read": n.is_read
