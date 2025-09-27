@@ -14,6 +14,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import timedelta, datetime, date
 from sqlalchemy.orm import relationship
+from sqlalchemy import UniqueConstraint 
 
 import requests
 from typing import Optional
@@ -215,6 +216,34 @@ class Publication(db.Model):
     # la liaison d'une publication avec les commentaires
     commentaires = db.relationship("Commentaire", backref="publication", cascade="all, delete-orphan")
     association = db.relationship("Association", backref="publications")
+
+
+class Like(db.Model):
+    __tablename__ = "likes"
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    publication_id = db.Column(
+        db.Integer,
+        db.ForeignKey("publications.id_publication", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "publication_id", name="uq_like_user_pub"),
+    )
+
+
+Publication.likes = db.relationship(
+    "Like",
+    backref="publication",
+    cascade="all, delete-orphan"
+)
 
 class Commentaire(db.Model):
     __tablename__ = "commentaires"
@@ -2497,26 +2526,68 @@ def verify_flouci_payment(payment_id):
            
 
 # faire like à une publication
+from sqlalchemy.exc import IntegrityError
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+
 @app.route("/like-publication/<int:publication_id>", methods=["POST"])
 @jwt_required()
 def like_publication(publication_id):
     try:
         claims = get_jwt()
-        if claims.get("role") not in ["donator", "admin","association"]:
-            return jsonify({"error": "Seuls les utilisateurs peuvent liker."}), 403
+        if claims.get("role") not in ["donator", "association", "admin"]:
+            return jsonify({"error": "Accès refusé."}), 403
+
+        user_id = get_jwt_identity()
 
         publication = Publication.query.get(publication_id)
         if not publication:
             return jsonify({"error": "Publication non trouvée."}), 404
 
-        publication.nb_likes += 1
-        db.session.commit()
+        like = Like(user_id=user_id, publication_id=publication_id)
+        db.session.add(like)
 
-        return jsonify({"message": "👍 Publication likée", "nb_likes": publication.nb_likes}), 200
+        # On n'incrémente que si l'insertion réussit
+        publication.nb_likes = (publication.nb_likes or 0) + 1
+
+        db.session.commit()
+        return jsonify({"message": "👍 Like enregistré", "nb_likes": publication.nb_likes}), 200
+
+    except IntegrityError:
+        db.session.rollback()
+        # Contrainte UQ violée → déjà liké
+        return jsonify({"error": "Déjà liké par cet utilisateur."}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    # unlike la publication 
+@app.route("/unlike-publication/<int:publication_id>", methods=["POST"])
+@jwt_required()
+def unlike_publication(publication_id):
+    try:
+        claims = get_jwt()
+        if claims.get("role") not in ["donator", "association", "admin"]:
+            return jsonify({"error": "Accès refusé."}), 403
+
+        user_id = get_jwt_identity()
+        publication = Publication.query.get(publication_id)
+        if not publication:
+            return jsonify({"error": "Publication non trouvée."}), 404
+
+        like = Like.query.filter_by(user_id=user_id, publication_id=publication_id).first()
+        if not like:
+            # idempotent: on ne décrémente pas, on confirme juste l’état
+            return jsonify({"message": "Aucun like à retirer.", "nb_likes": publication.nb_likes}), 200
+
+        db.session.delete(like)
+        publication.nb_likes = max((publication.nb_likes or 0) - 1, 0)
+        db.session.commit()
+        return jsonify({"message": "👎 Like retiré", "nb_likes": publication.nb_likes}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
 
 # analyser sentiment d'un donateur
 

@@ -30,6 +30,8 @@ editingCommentId: number | null = null;
 editBuffer: string = '';
 replyBuffers: Record<number, string> = {};
 replyingOpen: Record<number, boolean> = {};
+ likedSelected = false;
+likeBusy = false;
 
   constructor(private authService: AuthService) {}
 
@@ -126,8 +128,15 @@ nextSlide() {
   
 
   
-  selectPublication(pub: any) {
+ selectPublication(pub: any) {
     this.selectedPublication = pub;
+    // charger l’état like pour ce post
+    if (this.role) {
+      this.authService.isPublicationLiked(pub.id_publication).subscribe({
+        next: (res) => this.likedSelected = !!res?.liked,
+        error: () => this.likedSelected = false
+      });
+    }
   }
     reloadSelectedPublication() {
     if (!this.selectedPublication) return;
@@ -188,19 +197,7 @@ nextSlide() {
 }
 
 
-  likeSelectedPublication() {
-    if (!this.selectedPublication) return;
-  
-    this.authService.likePublication(this.selectedPublication.id_publication).subscribe({
-      next: (res: any) => {
-        this.selectedPublication.nb_likes = res.nb_likes;
-      },
-      error: (err) => {
-        console.error("Erreur lors du like :", err);
-        alert(err.error?.error || "Erreur lors du like");
-      }
-    });
-  }
+
 
 startEditComment(c: any) {
   if (this.role !== 'donator' || !c.is_owner) return;
@@ -252,7 +249,30 @@ deleteComment(c: any, parentArray?: any[]) {
 }
 
 
+toggleLikeSelectedPublication() {
+    if (!this.selectedPublication || this.likeBusy) return;
+    this.likeBusy = true;
 
+    const id = this.selectedPublication.id_publication;
+    const req$ = this.likedSelected
+      ? this.authService.unlikePublication(id)
+      : this.authService.likePublication(id);
+
+    req$.subscribe({
+      next: (res: any) => {
+        // maj compteur selon action
+        if (this.likedSelected) {
+          this.selectedPublication.nb_likes = Math.max(0, (this.selectedPublication.nb_likes || 0) - 1);
+          this.likedSelected = false;
+        } else {
+          this.selectedPublication.nb_likes = (res?.nb_likes ?? (this.selectedPublication.nb_likes || 0) + 1);
+          this.likedSelected = true;
+        }
+      },
+      error: (err) => alert(err?.error?.error || 'Erreur lors de la mise à jour du like'),
+      complete: () => this.likeBusy = false
+    });
+  }
 
   
   

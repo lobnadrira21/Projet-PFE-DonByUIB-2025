@@ -323,6 +323,18 @@ likePublication(id: number) {
 
   return this.http.post(`${this.apiUrl}/like-publication/${id}`, {}, { headers });
 }
+unlikePublication(id: number) {
+  const token = this.getToken();
+  const headers = new HttpHeaders({
+    Authorization: `Bearer ${token}`
+  });
+
+  return this.http.post(`${this.apiUrl}/unlike-publication/${id}`, {}, { headers });
+}
+isPublicationLiked(id: number) {
+  const headers = new HttpHeaders({ Authorization: `Bearer ${this.getToken()}` });
+  return this.http.get<{ liked: boolean }>(`${this.apiUrl}/publication/${id}/is-liked`, { headers });
+}
 
 getDonById(id: number): Observable<any> {
   return this.http.get(`${this.apiUrl}/don/${id}`);
