@@ -40,6 +40,16 @@ export class AuthService {
     return localStorage.getItem('token'); // 🔄 FIXED: use 'token' not 'access_token'
   }
   
+  getRoleFromToken(): string | null {
+  const t = this.getToken();
+  if (!t) return null;
+  try {
+    const payload = JSON.parse(atob(t.split('.')[1]));
+    return (payload.role || '').toLowerCase();  // "admin" | "association"
+  } catch {
+    return null;
+  }
+}
 
   logout(): void {
     const token = this.getToken(); // Get the JWT token

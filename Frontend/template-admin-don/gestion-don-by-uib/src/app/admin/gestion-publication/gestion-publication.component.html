@@ -1,0 +1,38 @@
+<div class="main-content container mt-4">
+    <!-- ✅ Bouton pour ouvrir le modal -->
+    <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-danger" (click)="openAddPubModal()">
+          <i class="material-icons">add</i> Ajouter une publication
+        </button>
+      </div>
+      
+  
+
+  <div class="publication-list">
+    <div class="publication-card" *ngFor="let pub of publications">
+      <div class="publication-header">
+        <h3>{{ pub.titre }}</h3>
+      </div>
+      <p class="content">{{ pub.contenu }}</p>
+      <span class="date">{{ pub.date_publication | date }}</span>
+      <p class="author">
+        ✍️ Publié par : <strong>{{ pub.nom_association }}</strong>
+      </p>
+      
+      <div class="publication-actions">
+        <button class="btn-voir" (click)="openDetailPublication(pub.id_publication)">
+          <mat-icon>visibility</mat-icon>
+        </button>
+        
+        <button class="btn-edit" (click)="modifierPublication(pub.id_publication)">
+          <mat-icon>edit</mat-icon>
+        </button>
+        
+        <button class="btn-delete" (click)="deletePublication(pub.id_publication)">
+          <mat-icon>delete</mat-icon>
+        </button>
+        
+      </div>
+    </div>
+  </div>
+</div>

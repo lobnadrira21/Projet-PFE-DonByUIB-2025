@@ -39,6 +39,10 @@ import { MesPaiementsComponent } from './donator/mes-paiements/mes-paiements.com
 import { AssociationDetailComponent } from './front/association-detail/association-detail.component';
 import { HistoriqueDonatorComponent } from './donator/historique-donator/historique-donator.component';
 import { PaiementRecuAssociationComponent } from './components/paiement-recu-association/paiement-recu-association.component';
+import { GestionDonsComponent } from './admin/gestion-dons/gestion-dons.component';
+import { ModifierDonAdminComponent } from './admin/modifier-don-admin/modifier-don-admin.component';
+import { GestionPublicationComponent } from './admin/gestion-publication/gestion-publication.component';
+import { ModifierPublicationAdminComponent } from './admin/modifier-publication-admin/modifier-publication-admin.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'client', pathMatch: 'full' },
@@ -61,7 +65,10 @@ export const routes: Routes = [
       { path: 'admin-valider-don', component: ValiderRefuserDonComponent },
       { path: 'admin-valider-publication', component: ValiderRefuserPublicationComponent },
       { path: 'modifier-compte-association/:id', component: ModifierCompteAssociationComponent },
-      
+      { path: 'gestion-dons', component: GestionDonsComponent },
+      { path: 'modifier-don-admin/:id', component: ModifierDonAdminComponent },
+      { path: 'gestion-publications', component: GestionPublicationComponent },
+      { path: 'modifier-publication-admin/:id', component: ModifierPublicationAdminComponent },
     ]
   },
 

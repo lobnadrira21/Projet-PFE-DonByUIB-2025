@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit, ViewChild, ElementRef, NgZone } from '@angular/core';
 import * as Chartist from 'chartist';
 import { CommonModule } from '@angular/common';
 import { MatTooltipModule } from '@angular/material/tooltip'; 
@@ -18,12 +18,22 @@ assocTypeKeys: string[] = [];
 assocPieChart: any;
 assocTypeColors: {[key: string]: string} = {};
 pieChart: any;
+ sentimentsDonutChart?: Chart;
+  sentimentsMonthlyChart?: Chart;
 
-  constructor(private authService : AuthService) { }
+ pubSentimentsChart?: Chart;
+
+@ViewChild('pubSentimentsCanvas') pubCanvas?: ElementRef<HTMLCanvasElement>;
+  constructor(private authService : AuthService, private zone: NgZone) { }
     ngAfterViewInit() {
     // Pour s'assurer que le canvas est prêt
-    if (this.stats) {
-      this.initPieChart();
+    
+      if (this.stats) {
+          this.initPieChart();
+       this.initSentimentCharts();
+      this.zone.runOutsideAngular(() => {
+        setTimeout(() => this.initPubSentimentsChart(), 0);
+      });
     }
   }
   startAnimationForLineChart(chart){
@@ -86,18 +96,78 @@ pieChart: any;
     this.authService.getAdminStats().subscribe({
       next: (data) => {
         this.stats = data;
+        
         console.log("Stats:", this.stats);
         if (this.stats && this.stats.association_par_type) {
         this.assocTypeKeys = Object.keys(this.stats.association_par_type);
       }
-        this.initPieChart();
+
+       this.zone.runOutsideAngular(() => {
+          setTimeout(() => this.initPubSentimentsChart(), 0);
+            this.initPieChart();
+        this.initSentimentCharts();
+        
+        });
       },
-      error: (err) => {
-        console.error(err);
+      error: (err) => console.error(err)
+    });
+      
+     
+  }
+   private initPubSentimentsChart() {
+    const list = this.stats?.sentiments_par_publication as Array<any> | undefined;
+    if (!list || !list.length) return;
+
+    const el = this.pubCanvas?.nativeElement;
+    if (!el) return;
+
+    const labels = list.map(x => x.titre);
+    const dataPos = list.map(x => x.positif || 0);
+    const dataNeu = list.map(x => x.neutre  || 0);
+    const dataNeg = list.map(x => (x.negatif ?? x['négatif'] ?? 0));
+
+    // (re)destroy si besoin
+    this.pubSentimentsChart?.destroy();
+
+    this.pubSentimentsChart = new Chart(el, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Positif', data: dataPos, backgroundColor: '#4caf50' },
+          { label: 'Neutre',  data: dataNeu, backgroundColor: '#9e9e9e' },
+          { label: 'Négatif', data: dataNeg, backgroundColor: '#f44336' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // important quand la hauteur est gérée en CSS
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              title: (items) => labels[items[0].dataIndex]
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            ticks: {
+              maxRotation: 0,
+              minRotation: 0,
+              callback: (_: any, i: number) => {
+                const t = labels[i] || '';
+                return t.length > 18 ? t.slice(0, 18) + '…' : t;
+              }
+            }
+          },
+          y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+        }
       }
     });
   }
-
+  
 initPieChart() {
     // ✅ Line Chart : Montant par mois
     const montantData = {
@@ -159,6 +229,68 @@ initPieChart() {
         }
       }
     });
+
+
+
+  }
+
+
+   private initSentimentCharts() {
+    if (!this.stats) return;
+
+    // valeurs globales (attention à l’accent de "négatif")
+    const pos = this.stats?.sentiments?.positif || 0;
+    const neg = (this.stats?.sentiments?.['négatif'] ?? this.stats?.sentiments?.negatif) || 0;
+    const neu = this.stats?.sentiments?.neutre || 0;
+
+    // Doughnut global
+    const donutEl = document.getElementById('sentimentsDonut') as HTMLCanvasElement | null;
+    if (donutEl) {
+      if (this.sentimentsDonutChart) this.sentimentsDonutChart.destroy();
+      this.sentimentsDonutChart = new Chart(donutEl, {
+        type: 'doughnut',
+        data: {
+          labels: ['Positif', 'Neutre', 'Négatif'],
+          datasets: [{
+            data: [pos, neu, neg],
+            backgroundColor: ['#4caf50', '#9e9e9e', '#f44336']
+          }]
+        },
+        options: {
+          plugins: { legend: { position: 'bottom' } },
+          cutout: '55%'
+        }
+      });
+    }
+
+    // Bar mensuel (si dispo)
+    const labels = this.stats?.sentiments_par_mois?.labels || [];
+    const mPos   = this.stats?.sentiments_par_mois?.positif || [];
+    const mNeu   = this.stats?.sentiments_par_mois?.neutre  || [];
+    const mNeg   = this.stats?.sentiments_par_mois?.negatif || []; // (backend renvoie "negatif" sans accent ici)
+
+    const barEl = document.getElementById('sentimentsMonthlyBar') as HTMLCanvasElement | null;
+    if (barEl && labels.length) {
+      if (this.sentimentsMonthlyChart) this.sentimentsMonthlyChart.destroy();
+      this.sentimentsMonthlyChart = new Chart(barEl, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Positif', data: mPos, backgroundColor: '#4caf50' },
+            { label: 'Neutre',  data: mNeu, backgroundColor: '#9e9e9e' },
+            { label: 'Négatif', data: mNeg, backgroundColor: '#f44336' }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' } },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } }
+          }
+        }
+      });
+    }
   }
 
 

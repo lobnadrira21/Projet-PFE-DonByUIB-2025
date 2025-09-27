@@ -1,0 +1,71 @@
+<div class="page">
+  <mat-card class="don-card">
+    <div class="layout">
+      <!-- Gauche : image + upload -->
+      <aside class="side">
+        <img
+          class="cover"
+          [src]="imagePreview || currentPhoto || 'assets/img/don-default.png'"
+          alt="Photo du don"
+        />
+
+        <div class="title">{{ donForm.value.titre || 'Titre du don' }}</div>
+
+        <button mat-stroked-button type="button" (click)="fileInput.click()">
+          <mat-icon>photo_camera</mat-icon>&nbsp;Changer l’image
+        </button>
+        <input
+          #fileInput
+          hidden
+          type="file"
+          accept="image/*"
+          (change)="onFileSelected($event)"
+        />
+      </aside>
+
+      <!-- Droite : formulaire -->
+      <section class="content">
+        <h2>Modifier Don</h2>
+        <p class="subtitle">Tu peux modifier les détails du don ici.</p>
+
+        <form class="form-grid" [formGroup]="donForm" (ngSubmit)="onSubmit()">
+          <mat-form-field appearance="outline">
+            <mat-label>Titre*</mat-label>
+            <input matInput formControlName="titre" />
+            <mat-error *ngIf="donForm.get('titre')?.hasError('required')">Titre requis</mat-error>
+            <mat-error *ngIf="donForm.get('titre')?.hasError('minlength')">3 caractères min.</mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Objectif (TND)</mat-label>
+            <input matInput type="number" step="0.01" min="1" formControlName="objectif" />
+            <mat-error *ngIf="donForm.get('objectif')?.hasError('required')">Objectif requis</mat-error>
+            <mat-error *ngIf="donForm.get('objectif')?.hasError('min')">Doit être ≥ 1</mat-error>
+          </mat-form-field>
+
+          <mat-form-field class="full" appearance="outline">
+            <mat-label>Description</mat-label>
+            <textarea matInput rows="5" formControlName="description"></textarea>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Date fin de collecte</mat-label>
+            <input matInput [matDatepicker]="picker" formControlName="date_fin_collecte" />
+            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+            <mat-error *ngIf="donForm.get('date_fin_collecte')?.hasError('required')">
+              Date requise
+            </mat-error>
+          </mat-form-field>
+
+          <div class="actions full">
+            <button mat-stroked-button type="button" (click)="cancel()">Annuler</button>
+            <button mat-flat-button color="primary" type="submit" [disabled]="donForm.invalid || donForm.pristine">
+              Enregistrer
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </mat-card>
+</div>

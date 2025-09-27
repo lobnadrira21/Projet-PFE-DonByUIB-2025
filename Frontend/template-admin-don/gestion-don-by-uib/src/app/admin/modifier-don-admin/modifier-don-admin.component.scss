@@ -1,0 +1,66 @@
+.page { padding: 16px; }
+
+/* élargis la carte : 92vw avec bornes 1100–1500px */
+.don-card {
+  width: clamp(1100px, 92vw, 1500px);
+  margin: 16px auto;
+  padding: 0;
+  margin-top: 4%;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 420px minmax(620px, 1fr); /* image | formulaire */
+  gap: 24px;
+}
+
+.side {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+
+  .cover {
+    width: 320px;
+    height: 220px;
+    object-fit: cover;
+    border-radius: 12px;
+    background: #f5f5f5;
+    box-shadow: 0 8px 24px rgba(0,0,0,.07);
+  }
+
+  .title {
+    font-weight: 600;
+    text-align: center;
+    margin-top: 6px;
+  }
+}
+
+.content {
+  padding: 24px;
+
+  h2 { margin: 0 0 6px; font-weight: 800; }
+  .subtitle { margin: 0 0 18px; color: #607d8b; }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: 16px 20px;
+
+  .full { grid-column: 1 / -1; }
+  mat-form-field { width: 100%; }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 960px) {
+  .don-card { width: 96vw; }
+  .layout { grid-template-columns: 1fr; }
+}

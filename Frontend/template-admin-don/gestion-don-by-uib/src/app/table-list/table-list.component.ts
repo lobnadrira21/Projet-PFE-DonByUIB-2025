@@ -18,11 +18,11 @@ import { AjoutDonComponent } from 'app/components/ajout-don/ajout-don.component'
   templateUrl: './table-list.component.html',
   styleUrls: ['./table-list.component.css'],
   imports: [MatButtonModule, MatTooltipModule,RouterModule, CommonModule,
-     FormsModule,  // ✅ Required for [(ngModel)]
-        MatFormFieldModule,  // ✅ Required for <mat-form-field>
-        MatInputModule,  // ✅ Required for matInput
-        MatDialogModule,  // ✅ Required for the modal/dialog
-          // ✅ Required for buttons
+     FormsModule, 
+        MatFormFieldModule,  
+        MatInputModule,  
+        MatDialogModule, 
+          
         MatIconModule,
         ReactiveFormsModule
 

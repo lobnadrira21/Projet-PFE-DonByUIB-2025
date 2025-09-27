@@ -1,6 +1,21 @@
 <h2 mat-dialog-title>Ajouter un Don</h2>
 <form [formGroup]="donForm" (ngSubmit)="ajouterDon()">
   <mat-dialog-content>
+
+    <!-- autres champs ... -->
+
+<div *ngIf="isAdmin" class="mb-3">
+  <mat-form-field appearance="outline" class="w-100">
+    <mat-label>Association</mat-label>
+    <select matNativeControl formControlName="id_association">
+      <option [ngValue]="null" disabled>— Choisir une association —</option>
+      <option *ngFor="let a of associations" [value]="a.id_association">
+        {{ a.nom_complet }}
+      </option>
+    </select>
+  </mat-form-field>
+</div>
+
     <div class="row g-3">
       <div class="col-md-6">
         <mat-form-field appearance="outline" class="w-100">

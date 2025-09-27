@@ -4,7 +4,21 @@
 </h2>
 
 <mat-dialog-content>
-  <form (ngSubmit)="submitPublication()" class="form">
+  <!-- add a template ref (#f) so the submit button can use form validity -->
+  <form #f="ngForm" (ngSubmit)="submitPublication()" class="form">
+
+    <!-- Admin only: choose target association -->
+    <mat-form-field *ngIf="isAdmin" appearance="outline" class="full-width">
+      <mat-label>Association</mat-label>
+      <mat-select [(ngModel)]="id_association" name="id_association" required>
+        <mat-option [value]="null" disabled>— Sélectionnez une association —</mat-option>
+        <mat-option *ngFor="let a of associations" [value]="a.id_association">
+          {{ a.nom_complet }}
+        </mat-option>
+      </mat-select>
+      <mat-hint>Obligatoire pour l’administrateur</mat-hint>
+    </mat-form-field>
+
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Titre</mat-label>
       <input
@@ -15,7 +29,7 @@
         required
         placeholder="Ex. Collecte de vêtements d’hiver"
       />
-      <mat-hint align="end">{{ titre.length || 0 }}/{{ maxTitle }}</mat-hint>
+      <mat-hint align="end">{{ (titre || '').length }}/{{ maxTitle }}</mat-hint>
     </mat-form-field>
 
     <mat-form-field appearance="outline" class="full-width">
@@ -31,7 +45,7 @@
         required
         placeholder="Décrivez votre action, l’objectif, les besoins, etc."
       ></textarea>
-      <mat-hint align="end">{{ contenu.length || 0 }}/{{ maxContent }}</mat-hint>
+      <mat-hint align="end">{{ (contenu || '').length }}/{{ maxContent }}</mat-hint>
     </mat-form-field>
 
     <p *ngIf="errorMessage" class="error-message">
@@ -45,7 +59,13 @@
   <button mat-stroked-button color="warn" type="button" (click)="closeDialog()" [disabled]="isSubmitting">
     Annuler
   </button>
-  <button mat-flat-button color="primary" type="submit" form="ngForm" (click)="submitPublication()" [disabled]="isSubmitting">
+  <!-- submit the form; rely on ngForm validity -->
+  <button
+    mat-flat-button
+    color="primary"
+    type="submit"
+    [disabled]="isSubmitting || f.invalid || (isAdmin && !id_association)"
+    (click)="f.ngSubmit.emit()">
     <mat-icon>send</mat-icon>
     {{ isSubmitting ? 'Publication…' : 'Publier' }}
   </button>

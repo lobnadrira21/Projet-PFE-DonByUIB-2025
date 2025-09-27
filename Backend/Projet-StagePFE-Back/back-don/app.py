@@ -1046,65 +1046,83 @@ def get_profile_association():
 @jwt_required()
 def create_don():
     try:
-        claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied: only associations can create dons."}), 403
+        role = get_jwt().get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Accès refusé"}), 403
 
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
+        if not user:
+            return jsonify({"error": "Utilisateur introuvable"}), 404
 
-        association = Association.query.filter_by(email=user.email).first()
-        if not association:
-            return jsonify({"error": "Aucune association liée à ce compte."}), 404
+        # Accepte form-data (avec photo) OU JSON
+        is_form = bool(request.form) or bool(request.files)
+        data = request.form if is_form else (request.get_json(silent=True) or {})
+        file = request.files.get("photo_file") if is_form else None
 
-        data = request.form
-        file = request.files.get("photo_file")
+        # Déterminer l'association cible
+        if role == "association":
+            assoc = Association.query.filter_by(email=user.email).first()
+            if not assoc:
+                return jsonify({"error": "Aucune association liée à ce compte."}), 404
+            id_association = assoc.id_association
+            statut = "en_attente"     # créé par asso → à valider
+        else:
+            # admin doit fournir l'asso ciblée
+            id_association = data.get("id_association")
+            if not id_association:
+                return jsonify({"error": "id_association est requis pour l’admin."}), 400
+            try:
+                id_association = int(id_association)
+            except Exception:
+                return jsonify({"error": "id_association doit être un entier"}), 400
+            statut = "valide"         # créé par admin → déjà validé
 
         # Champs requis
-        titre = data.get("titre")
+        titre = (data.get("titre") or "").strip()
         objectif_str = data.get("objectif")
         date_fin_collecte_str = data.get("date_fin_collecte")
-
         if not titre or not objectif_str or not date_fin_collecte_str:
             return jsonify({"error": "Titre, objectif et date_fin_collecte sont obligatoires."}), 400
 
-        # Conversion float
+        # Conversions
         try:
             objectif = float(objectif_str)
         except Exception:
             return jsonify({"error": "L'objectif doit être un nombre"}), 400
 
-        # Conversion date
         try:
             date_fin_collecte = datetime.strptime(date_fin_collecte_str, "%Y-%m-%d").date()
         except Exception:
             return jsonify({"error": "La date doit être au format AAAA-MM-JJ"}), 400
 
-        # Image
+        # Photo (optionnelle)
         photo_path = None
-        if file:
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            photo_path = f"/static/uploads/{filename}"
+        if file and file.filename:
+            safe = secure_filename(file.filename)
+            base, ext = os.path.splitext(safe)
+            unique = f"{base}_{uuid.uuid4().hex[:8]}{ext}"
+            dest = os.path.join(app.config['UPLOAD_FOLDER'], unique)
+            file.save(dest)
+            photo_path = f"/static/uploads/{unique}"
 
-        # Créer Don
+        # Créer le don
         new_don = Don(
-            titre=titre.strip(),
-            description=data.get("description", "").strip(),
+            titre=titre,
+            description=(data.get("description") or "").strip(),
             objectif=objectif,
             montant_collecte=0.0,
             date_fin_collecte=date_fin_collecte,
             photo_don=photo_path,
-            id_association=association.id_association,
+            id_association=id_association,
             id_utilisateur=current_user_id,
-            statut="en_attente",
+            statut=statut,  # ← "valide" si admin, sinon "en_attente"
         )
 
         db.session.add(new_don)
         db.session.commit()
 
-        return jsonify({"message": "✅ Don créé avec succès !"}), 201
+        return jsonify({"message": "✅ Don créé avec succès !", "id_don": new_don.id_don, "statut": new_don.statut}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -1118,48 +1136,71 @@ def create_don():
 def update_don(id_don):
     try:
         claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Accès refusé : seules les associations peuvent modifier un don."}), 403
+        role = claims.get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Accès refusé"}), 403
 
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        association = Association.query.filter_by(email=user.email).first()
+        # --- Récupération du don selon le rôle ---
+        if role == "admin":
+            don = Don.query.get(id_don)
+            if not don:
+                return jsonify({"error": "Don introuvable."}), 404
+        else:
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if not user:
+                return jsonify({"error": "Utilisateur introuvable."}), 404
 
-        if not association:
-            return jsonify({"error": "Association non trouvée."}), 404
+            assoc = Association.query.filter_by(email=user.email).first()
+            if not assoc:
+                return jsonify({"error": "Association non trouvée."}), 404
 
-        don = Don.query.filter_by(id_don=id_don, id_association=association.id_association).first()
-        if not don:
-            return jsonify({"error": "Don introuvable ou non autorisé."}), 404
+            don = Don.query.filter_by(id_don=id_don, id_association=assoc.id_association).first()
+            if not don:
+                return jsonify({"error": "Don introuvable ou non autorisé."}), 404
 
-        # Récupérer les données
-        data = request.form
-        file = request.files.get("photo_file")
+        # --- Lecture des données: form-data (multipart) OU JSON ---
+        is_form = bool(request.form) or bool(request.files)
+        data = request.form if is_form else (request.get_json(silent=True) or {})
+        file = request.files.get("photo_file") if is_form else None
 
-        if "titre" in data:
+        # --- Mises à jour conditionnelles (champs présents uniquement) ---
+        if "titre" in data and data["titre"] is not None:
             don.titre = data["titre"].strip()
 
-        if "description" in data:
+        if "description" in data and data["description"] is not None:
             don.description = data["description"].strip()
 
-        if "objectif" in data:
+        if "objectif" in data and data["objectif"] is not None:
             try:
                 don.objectif = float(data["objectif"])
-            except ValueError:
+            except Exception:
                 return jsonify({"error": "L'objectif doit être un nombre"}), 400
 
-        if "date_fin_collecte" in data:
+        if "date_fin_collecte" in data and data["date_fin_collecte"]:
             try:
                 don.date_fin_collecte = datetime.strptime(data["date_fin_collecte"], "%Y-%m-%d").date()
-            except ValueError:
+            except Exception:
                 return jsonify({"error": "Date invalide. Format attendu : AAAA-MM-JJ"}), 400
 
-        # 📷 Gestion du changement de photo
-        if file:
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            don.photo_don = f"/static/uploads/{filename}"
+        # --- Photo (si nouvelle image envoyée) ---
+        if file and file.filename:
+            safe = secure_filename(file.filename)
+            base, ext = os.path.splitext(safe)
+            unique = f"{base}_{uuid.uuid4().hex[:8]}{ext}"
+            dest = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            file.save(dest)
+            don.photo_don = f"/static/uploads/{unique}"
+
+        # --- Champs réservés à l'admin (optionnels) ---
+        if role == "admin":
+            if "statut" in data and data["statut"]:
+                don.statut = data["statut"]  # ex: en_attente | valide | refuse
+            if "id_association" in data and data["id_association"]:
+                try:
+                    don.id_association = int(data["id_association"])
+                except Exception:
+                    return jsonify({"error": "id_association doit être un entier"}), 400
 
         db.session.commit()
         return jsonify({"message": "✅ Don mis à jour avec succès."}), 200
@@ -1174,19 +1215,30 @@ def update_don(id_don):
 @jwt_required()
 def delete_don(id_don):
     try:
-        claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied! Only associations can delete their donations."}), 403
+        claims = get_jwt()                      
+        role = claims.get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Accès refusé"}), 403
 
-        # ✅ Assoc liée au user connecté
-        assoc = Association.query.filter_by(email=claims.get("email")).first()
-        if not assoc:
-            return jsonify({"error": "Association introuvable pour cet utilisateur."}), 404
+        if role == "admin":
+            # admin: can delete any don
+            don = Don.query.get(id_don)
+            if not don:
+                return jsonify({"error": "Don introuvable."}), 404
+        else:
+            # association: only its own dons
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if not user:
+                return jsonify({"error": "Utilisateur introuvable."}), 404
 
-        # ✅ Chercher le don appartenant à cette association
-        don = Don.query.filter_by(id_don=id_don, id_association=assoc.id_association).first()
-        if not don:
-            return jsonify({"error": "Don not found."}), 404
+            assoc = Association.query.filter_by(email=user.email).first()
+            if not assoc:
+                return jsonify({"error": "Association introuvable pour cet utilisateur."}), 404
+
+            don = Don.query.filter_by(id_don=id_don, id_association=assoc.id_association).first()
+            if not don:
+                return jsonify({"error": "Don introuvable ou non autorisé."}), 404
 
         db.session.delete(don)
         db.session.commit()
@@ -1428,9 +1480,9 @@ def get_all_publication_admin():
 @jwt_required()
 def get_dons():
     try:
-        claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied: only associations can view their dons."}), 403
+        role = get_jwt().get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Accès refusé"}), 403
 
         current_user_id = get_jwt_identity()
 
@@ -1667,35 +1719,83 @@ from datetime import datetime
 def create_publication():
     try:
         claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied: only associations can create publications."}), 403
+        role = claims.get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Access denied"}), 403
 
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
+        if not user:
+            return jsonify({"error": "Utilisateur introuvable."}), 404
 
-        association = Association.query.filter_by(email=user.email).first()
-        if not association:
-            return jsonify({"error": "Aucune association liée à ce compte."}), 404
+        # Accepte JSON (principal) ou form (fallback)
+        data = request.get_json(silent=True) or request.form.to_dict()
 
-        data = request.get_json()
-        titre = data.get("titre")
-        contenu = data.get("contenu")
-
+        titre = (data.get("titre") or "").strip()
+        contenu = (data.get("contenu") or "").strip()
         if not titre or not contenu:
             return jsonify({"error": "Titre et contenu sont requis."}), 400
 
+        # Déterminer l'association cible + statut selon le rôle
+        if role == "association":
+            association = Association.query.filter_by(email=user.email).first()
+            if not association:
+                return jsonify({"error": "Aucune association liée à ce compte."}), 404
+            id_association = association.id_association
+            statut = "en_attente"
+        else:
+            # ADMIN : doit fournir id_association et la publication est automatiquement validée
+            id_association = data.get("id_association")
+            if not id_association:
+                return jsonify({"error": "id_association est requis pour l’admin."}), 400
+            try:
+                id_association = int(id_association)
+            except Exception:
+                return jsonify({"error": "id_association doit être un entier."}), 400
+            if not Association.query.get(id_association):
+                return jsonify({"error": "Association inconnue."}), 404
+            statut = "valide"
+
         new_pub = Publication(
-            titre=titre.strip(),
-            contenu=contenu.strip(),
+            titre=titre,
+            contenu=contenu,
             date_publication=datetime.utcnow().date(),
-            id_association=association.id_association,
-            statut="en_attente",
+            id_association=id_association,
+            statut=statut,
         )
-
         db.session.add(new_pub)
-        db.session.commit()
+        db.session.flush()  # pour récupérer new_pub.id_publication avant commit
 
-        return jsonify({"message": "✅ Publication créée avec succès."}), 201
+        # Si ADMIN → publier = déjà validée : on notifie comme dans /publication/<id>/valider
+        if role == "admin":
+            # notif pour l'association concernée
+            notif_assoc = Notification(
+                contenu=f"La publication '{new_pub.titre}' a été validée par l’administrateur.",
+                date=datetime.utcnow(),
+                is_read=False,
+                id_association=id_association,
+                id_publication=new_pub.id_publication,
+            )
+            db.session.add(notif_assoc)
+
+            # notifs pour tous les donateurs
+            utilisateurs = User.query.filter_by(role='donator').all()
+            for u in utilisateurs:
+                db.session.add(Notification(
+                    contenu=f"Nouvelle publication : {new_pub.titre}",
+                    date=datetime.utcnow(),
+                    is_read=False,
+                    id_association=id_association,
+                    id_user=u.id,
+                    id_publication=new_pub.id_publication,
+                ))
+
+        db.session.commit()
+        return jsonify({
+            "message": "✅ Publication créée avec succès.",
+            "id_publication": new_pub.id_publication,
+            "statut": new_pub.statut
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -1775,7 +1875,8 @@ def get_publications():
 
 # voir détails publication 
 from sqlalchemy.orm import joinedload
-
+from sqlalchemy.orm import subqueryload
+from datetime import datetime
 @app.route("/publication/<int:pub_id>", methods=["GET"])
 @jwt_required()
 def get_publication_detail(pub_id):
@@ -1787,8 +1888,8 @@ def get_publication_detail(pub_id):
         publication = (
             Publication.query
             .options(
-                joinedload(Publication.commentaires).joinedload(Commentaire.replies),
-                joinedload(Publication.association)
+                subqueryload(Publication.commentaires).subqueryload(Commentaire.replies),
+                subqueryload(Publication.association)
             )
             .filter(Publication.id_publication == pub_id)
             .first()
@@ -1796,9 +1897,14 @@ def get_publication_detail(pub_id):
         if not publication:
             return jsonify({"error": "Publication non trouvée."}), 404
 
-        # Contrôle d'accès selon rôle
+        # Contrôle d'accès par rôle
         if role == "association":
-            assoc = Association.query.filter_by(email=claims.get("email")).first()
+            # ⚠️ ne pas lire l'email dans claims, va chercher le User via l'identity
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if not user:
+                return jsonify({"error": "Utilisateur introuvable."}), 404
+            assoc = Association.query.filter_by(email=user.email).first()
             if not assoc or publication.id_association != assoc.id_association:
                 return jsonify({"error": "Access denied!"}), 403
 
@@ -1807,11 +1913,12 @@ def get_publication_detail(pub_id):
                 return jsonify({"error": "Access denied!"}), 403
 
         elif role == "admin":
+            # admin : accès total
             pass
         else:
             return jsonify({"error": "Access denied!"}), 403
 
-        # Id utilisateur courant pour marquer les commentaires "is_owner"
+        # Id utilisateur courant pour marquer les commentaires "is_owner" (si tu l'utilises dans serialize)
         try:
             current_user_id = int(get_jwt_identity())
         except Exception:
@@ -1926,43 +2033,115 @@ def _count_comment_subtree(c: Commentaire) -> int:
 
 
 # modifier publication
+from flask import request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
+from datetime import datetime
 
-@app.route("/update-publication/<int:id>", methods=["PUT"])
+@app.route("/update-publication/<int:id>", methods=["PUT", "PATCH"])
 @jwt_required()
 def update_publication(id):
     try:
         claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied: only associations can update publications."}), 403
+        role = claims.get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Accès refusé"}), 403
 
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        association = Association.query.filter_by(email=user.email).first()
+        # Récupération de la publication
+        pub = Publication.query.get(id)
+        if not pub:
+            return jsonify({"error": "Publication introuvable."}), 404
 
-        if not association:
-            return jsonify({"error": "Aucune association trouvée."}), 404
+        # Contrôle d'accès pour association
+        if role == "association":
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if not user:
+                return jsonify({"error": "Utilisateur introuvable."}), 404
+            assoc = Association.query.filter_by(email=user.email).first()
+            if not assoc:
+                return jsonify({"error": "Association introuvable."}), 404
+            if pub.id_association != assoc.id_association:
+                return jsonify({"error": "Publication non autorisée."}), 403
 
-        publication = Publication.query.filter_by(id_publication=id, id_association=association.id_association).first()
+        # Données (JSON ou form)
+        is_form = bool(request.form)
+        data = request.form if is_form else (request.get_json(silent=True) or {})
 
-        if not publication:
-            return jsonify({"error": "Publication introuvable ou non autorisée."}), 404
+        old_statut = pub.statut
+        statut_changed_to = None
 
-        data = request.get_json()
-        titre = data.get("titre")
-        contenu = data.get("contenu")
+        # Champs communs
+        if "titre" in data and data["titre"] is not None:
+            pub.titre = data["titre"].strip()
+        if "contenu" in data and data["contenu"] is not None:
+            pub.contenu = data["contenu"].strip()
 
-        if titre:
-            publication.titre = titre.strip()
-        if contenu:
-            publication.contenu = contenu.strip()
+        # Champs réservés à l'admin
+        if role == "admin":
+            # changement de statut (optionnel)
+            if "statut" in data and data["statut"]:
+                new_statut = data["statut"]
+                if new_statut in ("en_attente", "valide", "refuse"):
+                    pub.statut = new_statut
+                    if new_statut != old_statut:
+                        statut_changed_to = new_statut
+                else:
+                    return jsonify({"error": "statut invalide (en_attente|valide|refuse)"}), 400
+
+            # bascule vers une autre association (optionnel)
+            if "id_association" in data and data["id_association"]:
+                try:
+                    new_assoc_id = int(data["id_association"])
+                except Exception:
+                    return jsonify({"error": "id_association doit être un entier"}), 400
+                if not Association.query.get(new_assoc_id):
+                    return jsonify({"error": "Association inconnue."}), 404
+                pub.id_association = new_assoc_id
+
+        db.session.flush()  # on calcule les notifs avec les valeurs à jour
+
+        # Notifications si l'admin a modifié le statut
+        if role == "admin" and statut_changed_to:
+            if statut_changed_to == "valide":
+                # notif association
+                db.session.add(Notification(
+                    contenu=f"La publication '{pub.titre}' a été validée par l’administrateur.",
+                    date=datetime.utcnow(),
+                    is_read=False,
+                    id_association=pub.id_association,
+                    id_publication=pub.id_publication,
+                ))
+                # notifs donateurs
+                for u in User.query.filter_by(role='donator').all():
+                    db.session.add(Notification(
+                        contenu=f"Nouvelle publication : {pub.titre}",
+                        date=datetime.utcnow(),
+                        is_read=False,
+                        id_association=pub.id_association,
+                        id_user=u.id,
+                        id_publication=pub.id_publication,
+                    ))
+            elif statut_changed_to == "refuse":
+                db.session.add(Notification(
+                    contenu=f"La publication '{pub.titre}' a été refusée par l’administrateur.",
+                    date=datetime.utcnow(),
+                    is_read=False,
+                    id_association=pub.id_association,
+                    id_publication=pub.id_publication,
+                ))
 
         db.session.commit()
-
-        return jsonify({"message": "✅ Publication modifiée avec succès."}), 200
+        return jsonify({
+            "message": "✅ Publication modifiée avec succès.",
+            "id_publication": pub.id_publication,
+            "statut": pub.statut,
+            "id_association": pub.id_association
+        }), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 
 # delete publication
@@ -1971,30 +2150,34 @@ def update_publication(id):
 def delete_publication(id):
     try:
         claims = get_jwt()
-        if claims.get("role") != "association":
-            return jsonify({"error": "Access denied: only associations can delete publications."}), 403
+        role = claims.get("role")
+        if role not in ("admin", "association"):
+            return jsonify({"error": "Accès refusé"}), 403
 
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+        pub = Publication.query.get(id)
+        if not pub:
+            return jsonify({"error": "Publication introuvable."}), 404
 
-        association = Association.query.filter_by(email=user.email).first()
-        if not association:
-            return jsonify({"error": "Aucune association trouvée."}), 404
+        if role == "association":
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            if not user:
+                return jsonify({"error": "Utilisateur introuvable."}), 404
+            assoc = Association.query.filter_by(email=user.email).first()
+            if not assoc:
+                return jsonify({"error": "Association introuvable."}), 404
+            if pub.id_association != assoc.id_association:
+                return jsonify({"error": "Publication non autorisée."}), 403
 
-        publication = Publication.query.filter_by(id_publication=id, id_association=association.id_association).first()
+       
 
-        if not publication:
-            return jsonify({"error": "Publication introuvable ou non autorisée."}), 404
-
-        db.session.delete(publication)
+        db.session.delete(pub)
         db.session.commit()
-
         return jsonify({"message": "✅ Publication supprimée avec succès."}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 
 
@@ -2644,7 +2827,9 @@ def get_historique_donateur():
 
 
 # stat admin
-
+from sqlalchemy import func, extract, case
+from sqlalchemy.orm import joinedload
+from datetime import datetime
 @app.route("/admin/statistiques", methods=["GET"])
 @jwt_required()
 def get_admin_stats():
@@ -2653,27 +2838,23 @@ def get_admin_stats():
         return jsonify({"error": "Accès refusé"}), 403
 
     try:
-        # ✅ Comptage par type d'association
+        # ========= Associations par type =========
         types = [t.value for t in TypeAssociationEnum]
         association_par_type = {}
-
         for t in types:
             count = Association.query.filter_by(type_association=TypeAssociationEnum(t)).count()
             association_par_type[t] = count
-
-
-        # ✅ Nombre total d'associations (somme des types)
         nb_associations = sum(association_par_type.values())
 
-        # ✅ Autres statistiques
+        # ========= Dons / montants =========
         nb_dons = Don.query.count()
-        total_montant = db.session.query(db.func.sum(Don.montant_collecte)).scalar() or 0.0
+        total_montant = db.session.query(func.sum(Don.montant_collecte)).scalar() or 0.0
         nb_dons_reussis = Don.query.filter_by(is_reussi=True).count()
 
-        # Répartition des dons par statut
+        # Répartition par statut
         nb_en_attente = Don.query.filter_by(statut="en_attente").count()
-        nb_valides = Don.query.filter_by(statut="valide").count()
-        nb_refuses = Don.query.filter_by(statut="refuse").count()
+        nb_valides    = Don.query.filter_by(statut="valide").count()
+        nb_refuses    = Don.query.filter_by(statut="refuse").count()
 
         # Top 5 dons les plus financés
         top_dons = Don.query.order_by(Don.montant_collecte.desc()).limit(5).all()
@@ -2682,21 +2863,96 @@ def get_admin_stats():
             for d in top_dons
         ]
 
-        # Montant collecté par mois (12 mois)
+        # Montant collecté par mois (1..12)
         montant_par_mois = []
         for m in range(1, 13):
-            montant = db.session.query(db.func.sum(Participation.montant))\
-                .filter(db.extract('month', Participation.date_participation) == m)\
-                .scalar() or 0.0
+            montant = (
+                db.session.query(func.sum(Participation.montant))
+                .filter(extract('month', Participation.date_participation) == m)
+                .scalar()
+                or 0.0
+            )
             montant_par_mois.append(montant)
 
-        # Publications validées et refusées
-        nb_pub_valides = Publication.query.filter_by(statut="valide").count()
-        nb_pub_refusees = Publication.query.filter_by(statut="refuse").count()
+        # Publications validées / refusées
+        nb_pub_valides   = Publication.query.filter_by(statut="valide").count()
+        nb_pub_refusees  = Publication.query.filter_by(statut="refuse").count()
 
         # Donateurs actifs (distinct)
         nb_donateurs_actifs = db.session.query(Participation.id_user).distinct().count()
 
+        # ========= Sentiments (global) =========
+        sentiments_labels = ["positif", "négatif", "neutre"]
+        sentiments_counts = {k: 0 for k in sentiments_labels}
+
+        rows = (
+            db.session.query(Commentaire.sentiment, func.count().label("c"))
+            .group_by(Commentaire.sentiment)
+            .all()
+        )
+        for s, c in rows:
+            if s in sentiments_counts:
+                sentiments_counts[s] = int(c or 0)
+
+        # ========= Sentiments par mois (année courante) =========
+        current_year = datetime.utcnow().year
+        monthly_rows = (
+            db.session.query(
+                extract('month', Commentaire.date_commentaire).label('m'),
+                func.sum(case((Commentaire.sentiment == 'positif', 1), else_=0)).label('positif'),
+                func.sum(case((Commentaire.sentiment == 'négatif', 1), else_=0)).label('negatif'),
+                func.sum(case((Commentaire.sentiment == 'neutre', 1), else_=0)).label('neutre'),
+            )
+            .filter(extract('year', Commentaire.date_commentaire) == current_year)
+            .group_by('m')
+            .order_by('m')
+            .all()
+        )
+
+        sentiments_par_mois = {
+            "labels": ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin",
+                       "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc"],
+            "positif": [0]*12,
+            "negatif": [0]*12,
+            "neutre":  [0]*12
+        }
+        for r in monthly_rows:
+            idx = int(r.m) - 1
+            sentiments_par_mois["positif"][idx] = int(r.positif or 0)
+            sentiments_par_mois["negatif"][idx] = int(r.negatif or 0)
+            sentiments_par_mois["neutre"][idx]  = int(r.neutre  or 0)
+
+        # ========= Sentiments par publication (Top N par nb de commentaires) =========
+        TOP_N = 10
+        pub_rows = (
+            db.session.query(
+                Publication.id_publication,
+                Publication.titre,
+                func.sum(case((Commentaire.sentiment == 'positif', 1), else_=0)).label('positif'),
+                func.sum(case((Commentaire.sentiment.in_(('negatif','négatif')), 1), else_=0)).label('negatif'),
+                func.sum(case((Commentaire.sentiment == 'neutre', 1), else_=0)).label('neutre'),
+                func.count(Commentaire.id_commentaire).label('total')
+            )
+            .outerjoin(Commentaire, Commentaire.id_publication == Publication.id_publication)
+            .group_by(Publication.id_publication, Publication.titre)
+            .order_by(func.count(Commentaire.id_commentaire).desc())
+            .limit(TOP_N)
+            .all()
+        )
+
+        sentiments_par_publication = [
+            {
+                "id_publication": r.id_publication,
+                "titre": r.titre,
+                "positif": int(r.positif or 0),
+                "negatif": int(r.negatif or 0),  # agrège 'negatif' et 'négatif'
+                "neutre":  int(r.neutre  or 0),
+                "total":   int(r.total   or 0),
+            }
+            for r in pub_rows
+        ]
+
+        # ========= Réponse =========
         return jsonify({
             "nb_associations": nb_associations,
             "association_par_type": association_par_type,
@@ -2710,7 +2966,10 @@ def get_admin_stats():
             "montant_par_mois": montant_par_mois,
             "nb_pub_valides": nb_pub_valides,
             "nb_pub_refusees": nb_pub_refusees,
-            "nb_donateurs_actifs": nb_donateurs_actifs
+            "nb_donateurs_actifs": nb_donateurs_actifs,
+            "sentiments": sentiments_counts,
+            "sentiments_par_mois": sentiments_par_mois,
+            "sentiments_par_publication": sentiments_par_publication
         }), 200
 
     except Exception as e:

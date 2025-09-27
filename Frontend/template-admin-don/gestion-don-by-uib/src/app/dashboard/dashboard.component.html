@@ -83,6 +83,34 @@
 
 
 
+
+ 
+<!-- Sentiments par publication -->
+<div class="row" *ngIf="stats?.sentiments_par_publication?.length">
+  <div class="col-md-12">
+    <div class="card card-chart">
+      <div class="card-header card-header-rose p-0">
+        <!-- wrapper + ref -->
+        <div class="ct-chart" id="pubSentimentsBarTopContainer">
+          <canvas #pubSentimentsCanvas></canvas>
+        </div>
+      </div>
+      <div class="card-body">
+        <h4 class="card-title">
+          Sentiments par publication (Top {{ stats?.sentiments_par_publication?.length }})
+        </h4>
+        <p class="card-category">Barres empilées : Positif / Neutre / Négatif</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
     <!-- Top Dons -->
     <div class="row">
       <div class="col-md-12">
