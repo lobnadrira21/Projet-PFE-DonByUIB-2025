@@ -2574,18 +2574,16 @@ def unlike_publication(publication_id):
             return jsonify({"error": "Publication non trouvée."}), 404
 
         like = Like.query.filter_by(user_id=user_id, publication_id=publication_id).first()
-        if not like:
-            # idempotent: on ne décrémente pas, on confirme juste l’état
-            return jsonify({"message": "Aucun like à retirer.", "nb_likes": publication.nb_likes}), 200
-
-        db.session.delete(like)
-        publication.nb_likes = max((publication.nb_likes or 0) - 1, 0)
-        db.session.commit()
-        return jsonify({"message": "👎 Like retiré", "nb_likes": publication.nb_likes}), 200
-
+        if like:
+            db.session.delete(like)
+            publication.nb_likes = max((publication.nb_likes or 0) - 1, 0)
+            db.session.commit()
+        # renvoyer la valeur réelle du serveur
+        return jsonify({"message": "👎 OK", "nb_likes": publication.nb_likes}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
 
 
 

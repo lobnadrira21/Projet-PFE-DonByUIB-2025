@@ -150,14 +150,20 @@
         </div>
       </div>
 
-      <div class="post-actions">
-  <button (click)="toggleLikeSelectedPublication()" [disabled]="likeBusy">
-    <mat-icon>{{ likedSelected ? 'favorite' : 'favorite_border' }}</mat-icon>
-    {{ likedSelected ? "Je n'aime plus" : "J’aime" }} ({{ selectedPublication.nb_likes }})
-  </button>
+    <div class="post-actions">
+  <button (click)="toggleLikeSelectedPublication()"
+        [disabled]="likeBusy || likedSelected === null">
+  <mat-icon [ngClass]="{ liked: likedSelected }">
+    {{ likedSelected ? 'favorite' : 'favorite_border' }}
+  </mat-icon>
+  {{ likedSelected ? "Je n'aime plus" : "J’aime" }} ({{ selectedPublication.nb_likes }})
+</button>
+
+
 
   <button><mat-icon>comment</mat-icon> Commenter</button>
 </div>
+
 
 
   <div class="comments-section" *ngIf="selectedPublication">

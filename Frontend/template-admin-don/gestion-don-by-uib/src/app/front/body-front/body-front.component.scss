@@ -535,13 +535,29 @@ html, body {
   font-size: 0.8rem;
 }
 
-.post-actions {
-  display: flex;
-  gap: 15px;
-  margin-top: 15px;
+
+
+.post-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+   margin-top: 15px;
   border-top: 1px solid #eee;
   padding-top: 10px;
+
+  mat-icon {
+    transition: transform .15s ease, color .2s ease, opacity .2s ease;
+    vertical-align: middle;
+
+    &.liked {
+      color: #e91e63;     // rose “like”
+      transform: scale(1.05);
+    }
+  }
 }
+
+
+
 
 .post-actions button {
   background: none;

@@ -30,9 +30,9 @@ editingCommentId: number | null = null;
 editBuffer: string = '';
 replyBuffers: Record<number, string> = {};
 replyingOpen: Record<number, boolean> = {};
- likedSelected = false;
-likeBusy = false;
 
+likeBusy = false;
+likedSelected: boolean | null = null; 
   constructor(private authService: AuthService) {}
 
   
@@ -128,23 +128,33 @@ nextSlide() {
   
 
   
- selectPublication(pub: any) {
-    this.selectedPublication = pub;
-    // charger l’état like pour ce post
-    if (this.role) {
-      this.authService.isPublicationLiked(pub.id_publication).subscribe({
+selectPublication(pub: any) {
+  this.selectedPublication = pub;
+  this.likedSelected = null;   
+  this.likeBusy = false;
+
+  this.authService.isPublicationLiked(pub.id_publication).subscribe({
+    next: (res) => this.likedSelected = !!res?.liked,
+    error: () => this.likedSelected = false
+  });
+}
+
+
+reloadSelectedPublication() {
+  if (!this.selectedPublication) return;
+  const id = this.selectedPublication.id_publication;
+  this.authService.getPublicationById(id).subscribe({
+    next: (pub) => {
+      this.selectedPublication = pub;
+     
+      this.authService.isPublicationLiked(id).subscribe({
         next: (res) => this.likedSelected = !!res?.liked,
         error: () => this.likedSelected = false
       });
-    }
-  }
-    reloadSelectedPublication() {
-    if (!this.selectedPublication) return;
-    this.authService.getPublicationById(this.selectedPublication.id_publication).subscribe({
-      next: (pub) => this.selectedPublication = pub,
-      error: (err) => console.error('Erreur reload publication :', err)
-    });
-  }
+    },
+    error: (err) => console.error('Erreur reload publication :', err)
+  });
+}
 
    openReply(commentId: number) {
     this.replyingOpen[commentId] = true;
@@ -248,31 +258,48 @@ deleteComment(c: any, parentArray?: any[]) {
   });
 }
 
-
 toggleLikeSelectedPublication() {
-    if (!this.selectedPublication || this.likeBusy) return;
-    this.likeBusy = true;
+  if (!this.selectedPublication || this.likeBusy) return;
+  if (this.likedSelected === (null as any)) return; 
 
-    const id = this.selectedPublication.id_publication;
-    const req$ = this.likedSelected
-      ? this.authService.unlikePublication(id)
-      : this.authService.likePublication(id);
+  this.likeBusy = true;
+  const id = this.selectedPublication.id_publication;
 
-    req$.subscribe({
-      next: (res: any) => {
-        // maj compteur selon action
-        if (this.likedSelected) {
-          this.selectedPublication.nb_likes = Math.max(0, (this.selectedPublication.nb_likes || 0) - 1);
-          this.likedSelected = false;
-        } else {
-          this.selectedPublication.nb_likes = (res?.nb_likes ?? (this.selectedPublication.nb_likes || 0) + 1);
-          this.likedSelected = true;
-        }
-      },
-      error: (err) => alert(err?.error?.error || 'Erreur lors de la mise à jour du like'),
-      complete: () => this.likeBusy = false
-    });
+  const doUnlike = () => this.authService.unlikePublication(id).subscribe({
+    next: (res: any) => {
+      this.selectedPublication.nb_likes = Number(res?.nb_likes) || 0;
+      this.likedSelected = false;
+      this.likeBusy = false;
+    },
+    error: (err) => { alert(err?.error?.error || 'Erreur unlike'); this.likeBusy = false; }
+  });
+
+  if (this.likedSelected) {
+    // UNLIKE
+    return doUnlike();
   }
+
+  // LIKE
+  this.authService.likePublication(id).subscribe({
+    next: (res: any) => {
+      this.selectedPublication.nb_likes = Number(res?.nb_likes) || ((this.selectedPublication.nb_likes || 0) + 1);
+      this.likedSelected = true;
+      this.likeBusy = false;
+    },
+    error: (err) => {
+      if (err?.status === 409) {
+      
+        this.likedSelected = true;
+        this.likeBusy = false;
+       
+      } else {
+        alert(err?.error?.error || 'Erreur like');
+        this.likeBusy = false;
+      }
+    }
+  });
+}
+
 
   
   
