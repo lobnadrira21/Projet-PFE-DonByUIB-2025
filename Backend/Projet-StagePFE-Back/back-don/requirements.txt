@@ -26,7 +26,7 @@ xhtml2pdf==0.2.15
 pdf2image==1.17.0
 deep-translator>=1.11.0
 vaderSentiment==3.3.2
-
+gunicorn
 # Prometheus metrics (needed for /metrics)
 prometheus-client>=0.20.0
 

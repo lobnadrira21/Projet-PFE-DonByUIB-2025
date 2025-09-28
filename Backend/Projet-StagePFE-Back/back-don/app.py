@@ -2773,83 +2773,156 @@ def mes_participations():
 
     return jsonify(result), 200
 
-#recu de paiement (vu par donateur et association)
-from flask import make_response, jsonify
 
+# reçu de paiement (vu par donateur, association, admin)
+from flask import make_response, jsonify
 from io import BytesIO
 import base64, os
-from flask_jwt_extended import jwt_required, get_jwt_identity
- 
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
 @app.route('/recu-pdf/<int:id_participation>', methods=['GET'])
 @jwt_required()
 def generate_recu_pdf(id_participation):
+    # 1) Engine check
     try:
-        from xhtml2pdf import pisa   
+        from xhtml2pdf import pisa
     except Exception as e:
         return jsonify({"error": "PDF engine not available", "details": str(e)}), 503
+
+    # 2) Fetch data
     participation = Participation.query.get(id_participation)
     if not participation:
         return jsonify({"error": "Participation introuvable"}), 404
 
     don = participation.don
     user = participation.user
-    current_user_id = get_jwt_identity()
-    current_user = User.query.get(current_user_id)
+    if not user or not don:
+        return jsonify({"error": "Données manquantes (don ou utilisateur)"}), 500
 
+    # 3) Authorization: donor or association owner or admin
+    current_identity = get_jwt_identity()
+    if not current_identity:
+        return jsonify({"error": "Token invalide"}), 401
 
-    # 📷 Logo UIB
-    logo_path = os.path.join(app.root_path, 'static', 'uploads', 'uiblogo.png')
-    with open(logo_path, "rb") as image_file:
-        logo_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+    claims = get_jwt() or {}
+    role = (claims.get("role") or "").lower()
+    jwt_email = (claims.get("email") or "").lower()
 
-    # ✅ Génération du HTML du reçu
+    # Resolve current_user from identity (id or email)
+    current_user = None
+    try:
+        # identity is numeric id
+        current_user_id_int = int(current_identity)
+        current_user = User.query.get(current_user_id_int)
+    except Exception:
+        current_user = None
+
+    if current_user is None and jwt_email:
+        # identity might be email; or we got email from custom claims
+        current_user = User.query.filter_by(email=jwt_email).first()
+
+    if current_user is None:
+        # As a last resort, if identity is a string email but no claim was set
+        if isinstance(current_identity, str) and "@" in current_identity:
+            current_user = User.query.filter_by(email=current_identity.lower()).first()
+
+    if not current_user:
+        return jsonify({"error": "Utilisateur introuvable"}), 404
+
+    # Donor who made this participation?
+    is_donor = False
+    try:
+        is_donor = int(user.id) == int(current_user.id)
+    except Exception:
+        is_donor = str(user.id) == str(current_user.id)
+
+    if not is_donor:
+        # Fallback compare by email (handles identity-as-email and case diffs)
+        u1 = (user.email or "").lower()
+        u2 = (current_user.email or "").lower()
+        if u1 and u2 and u1 == u2:
+            is_donor = True
+
+    # Association that owns the donation / campaign?
+    is_assoc = False
+    if role == "association":
+        assoc = Association.query.filter_by(email=(current_user.email or "")).first()
+        if assoc and getattr(don, "id_association", None) == assoc.id_association:
+            is_assoc = True
+
+    # Admin can see all
+    is_admin = (role == "admin")
+
+    if not (is_donor or is_assoc or is_admin):
+        return jsonify({"error": "Accès refusé"}), 403
+
+    # 4) Logo (safe fallback)
+    logo_base64 = ""
+    try:
+        logo_path = os.path.join(app.root_path, 'static', 'uploads', 'uiblogo.png')
+        with open(logo_path, "rb") as image_file:
+            logo_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+    except Exception:
+        logo_base64 = ""
+
+    # 5) Date formatting (safe)
+    date_txt = ""
+    try:
+        if participation.date_participation:
+            date_txt = participation.date_participation.strftime('%d/%m/%Y')
+    except Exception:
+        date_txt = ""
+
+    # 6) HTML (keep it simple for xhtml2pdf)
     html = f"""
     <html>
       <head>
-      <meta charset="utf-8" />
+        <meta charset="utf-8" />
         <style>
-          body {{ font-family: Arial, sans-serif; padding: 20px; }}
+          @page {{ size: A4; margin: 20mm; }}
+          body {{ font-family: Helvetica, Arial, sans-serif; font-size: 12pt; }}
           .header {{ text-align: center; }}
           .logo {{ width: 100px; }}
-          .content {{ margin-top: 30px; }}
-          .section {{ margin-bottom: 10px; }}
-          .footer {{ text-align: center; margin-top: 50px; font-size: 12px; color: #555; }}
+          .content {{ margin-top: 18pt; }}
+          .section {{ margin-bottom: 8pt; }}
+          .footer {{ text-align: center; margin-top: 24pt; font-size: 10pt; color: #555; }}
+          h2 {{ color: #e53935; }}
         </style>
       </head>
       <body>
         <div class="header">
-          <img class="logo" src="data:image/png;base64,{logo_base64}" />
-          <h2 style="color: #e53935;">Reçu de Paiement - DonByUIB</h2>
+          {"<img class='logo' src='data:image/png;base64," + logo_base64 + "' />" if logo_base64 else ""}
+          <h2>Reçu de Paiement - DonByUIB</h2>
         </div>
 
         <div class="content">
-          <div class="section"><strong>Nom du Donateur :</strong> {user.nom_complet}</div>
-          <div class="section"><strong>Email :</strong> {user.email}</div>
-          <div class="section"><strong>Campagne :</strong> {don.titre}</div>
-          <div class="section"><strong>Montant :</strong> {participation.montant} TND</div>
-          <div class="section"><strong>Date :</strong> {participation.date_participation.strftime('%d/%m/%Y')}</div>
+          <div class="section"><strong>Nom du Donateur :</strong> {user.nom_complet or ""}</div>
+          <div class="section"><strong>Email :</strong> {user.email or ""}</div>
+          <div class="section"><strong>Campagne :</strong> {don.titre or ""}</div>
+          <div class="section"><strong>Montant :</strong> {participation.montant or 0} TND</div>
+          <div class="section"><strong>Date :</strong> {date_txt}</div>
         </div>
 
         <div class="footer">
-          Ce reçu est généré automatiquement par DonByUIB.<br>
+          Ce reçu est généré automatiquement par DonByUIB.<br/>
           Merci pour votre soutien et votre générosité.
         </div>
       </body>
     </html>
-    
+    """
 
-      """
-
-    # ✅ Génération du PDF
+    # 7) Generate PDF (pass HTML string, set encoding)
     buffer = BytesIO()
-    pisa_status = pisa.CreatePDF(BytesIO(html.encode('utf-8')), dest=buffer)
-    if pisa_status.err:
+    result = pisa.CreatePDF(src=html, dest=buffer, encoding='utf-8')
+    if result.err:
         return jsonify({"error": "Erreur lors de la génération du PDF"}), 500
 
-    response = make_response(buffer.getvalue())
+    # 8) Return response
+    pdf_bytes = buffer.getvalue()
+    response = make_response(pdf_bytes)
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename=recu_{id_participation}.pdf'
+    response.headers['Cache-Control'] = 'no-store'
     return response
 
 

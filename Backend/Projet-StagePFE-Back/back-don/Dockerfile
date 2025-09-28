@@ -19,21 +19,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
+
 # Python deps
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
- && pip install --no-cache-dir -r requirements.txt \
- # to ensure Prometheus metrics are available
- && pip install --no-cache-dir prometheus-client
+COPY requirements.txt requirements-ml.txt .
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt \ 
+  
+    && pip install --no-cache-dir -r requirements-ml.txt
+
 
 # App code
 COPY . .
 
-# to keep ML disabled by default to prevent crashes on missing transformers/torch
+
 ENV USE_ML=0
 
 # The app listens on 8089 
 EXPOSE 8089
 
 
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "app:app"]
