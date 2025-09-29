@@ -38,4 +38,6 @@ ENV USE_ML=0
 EXPOSE 8089
 
 
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "app:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8089} app:app"]
+
+

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatIcon } from '@angular/material/icon';
+import {  MatIconModule } from '@angular/material/icon';
 import { Router, RouterModule } from '@angular/router';
 import { AjoutPublicationComponent } from 'app/components/ajout-publication/ajout-publication.component';
 import { DetailPublicationComponent } from 'app/components/detail-publication/detail-publication.component';
@@ -11,7 +11,7 @@ import { AuthService } from 'app/services/auth.service';
 @Component({
   selector: 'app-gestion-publication',
   standalone: true,
-  imports: [MatIcon, CommonModule,RouterModule],
+  imports: [MatIconModule, CommonModule,RouterModule],
   templateUrl: './gestion-publication.component.html',
   styleUrl: './gestion-publication.component.scss'
 })

@@ -2,7 +2,7 @@ FROM node:20 AS build
 WORKDIR /app
 
 COPY package*.json ./
-# ✅ Ignore peer-dep conflicts without touching your deps
+
 RUN npm config set legacy-peer-deps true
 RUN npm ci
 

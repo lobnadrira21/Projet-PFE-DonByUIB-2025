@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule, MatLabel } from '@angular/material/form-field';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from 'app/services/auth.service';
@@ -10,7 +10,7 @@ import { AuthService } from 'app/services/auth.service';
 @Component({
   selector: 'app-modifier-publication-admin',
   standalone: true,
-  imports: [CommonModule,ReactiveFormsModule,FormsModule,MatLabel,   MatFormFieldModule,
+  imports: [CommonModule,ReactiveFormsModule,FormsModule,   MatFormFieldModule,
     MatInputModule,     // ✅ nécessaire pour matInput
     MatButtonModule ],
   templateUrl: './modifier-publication-admin.component.html',
