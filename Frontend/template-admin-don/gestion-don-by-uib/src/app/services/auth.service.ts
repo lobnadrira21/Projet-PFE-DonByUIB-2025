@@ -2,12 +2,13 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Router } from '@angular/router';
+import { environment } from 'environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://127.0.0.1:5000'; // Flask Backend URL
+  private apiUrl = environment.apiUrl; // Flask Backend URL
 
   constructor(private http: HttpClient, private router: Router) {}
 
@@ -17,7 +18,7 @@ export class AuthService {
   }
 
   saveToken(token: string, role: string, username: string): void {
-    localStorage.setItem('token', token); // 👈 this must match getToken()
+    localStorage.setItem('token', token); 
     localStorage.setItem('role', role);
     localStorage.setItem('username', username);
   }
