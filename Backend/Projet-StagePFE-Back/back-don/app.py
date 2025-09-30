@@ -25,7 +25,7 @@ app = Flask(__name__)
 app.register_blueprint(metrics_bp)
 
 CORS(app, resources={r"/*": {
-    "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902"],
+    "origins": ["http://localhost:4200", "http://localhost:8100","http://localhost:29902","http://34.58.45.2"],
     "allow_headers": ["Content-Type", "Authorization"],
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 }})
